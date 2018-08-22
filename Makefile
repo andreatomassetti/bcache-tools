@@ -3,9 +3,9 @@ PREFIX=/usr
 UDEVLIBDIR=/lib/udev
 DRACUTLIBDIR=/lib/dracut
 INSTALL=install
-#CFLAGS+=-O2 -Wall -g
+CFLAGS+=-O2 -Wall -g
 
-all: make-bcache probe-bcache bcache-super-show bcache-register depend bcache
+all: make-bcache probe-bcache bcache-super-show bcache-register bcache
 
 install: make-bcache probe-bcache bcache-super-show
 	$(INSTALL) -m0755 make-bcache bcache-super-show	bcache $(DESTDIR)${PREFIX}/sbin/
@@ -31,15 +31,7 @@ bcache-super-show: CFLAGS += -std=gnu99
 bcache-super-show: bcache.o
 bcache-register: bcache-register.o
 
-CFLAGS+=`pkg-config --cflags blkid uuid smartcols`
-LDFLAGS+=`pkg-config --libs blkid uuid smartcols`
-
-SRCS=bcache-main.c bcache.c lib.c make.c
-depend: .depend
-.depend: $(SRCS)
-	rm -f ./.depend
-	$(CC) $(CFLAGS) -MM $^ > ./.depend;
-
-include .depend
-
+bcache: CFLAGS += `pkg-config --cflags blkid uuid smartcols`
+bcache: LDFLAGS += `pkg-config --libs blkid uuid smartcols`
+bcache: CFLAGS += -std=gnu99
 bcache: bcache-main.o bcache.o lib.o make.o

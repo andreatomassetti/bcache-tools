@@ -123,6 +123,4 @@ uint64_t crc64(const void *_data, size_t len);
 #define csum_set(i)							\
 	crc64(((void *) (i)) + 8, ((void *) end(i)) - (((void *) (i)) + 8))
 
-int make_bcache(int argc, char **argv);
-
 #endif

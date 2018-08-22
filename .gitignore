@@ -3,5 +3,6 @@
 /bcache-register
 /make-bcache
 /probe-bcache
+/bcache
 .*
 /*.o

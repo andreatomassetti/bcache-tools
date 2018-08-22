@@ -1,9 +1,13 @@
+// SPDX-License-Identifier: GPL-2.0
+// Author: Shaoxiong Li <dahefanteng@gmail.com>
+
 /*
  * Author: Kent Overstreet <kmo@daterainc.com>
  *
  * GPLv2
  *
- * TODO: It's OK to merge this file with 'make-bcache.c' after the 'bcache' tool has been well tested.
+ * TODO: It's OK to merge this file with 'make-bcache.c'
+ * after the 'bcache' tool has been well tested.
  */
 
 #define _FILE_OFFSET_BITS	64
@@ -40,6 +44,7 @@ uint64_t getblocks(int fd)
 {
 	uint64_t ret;
 	struct stat statbuf;
+
 	if (fstat(fd, &statbuf)) {
 		perror("stat error\n");
 		exit(EXIT_FAILURE);
@@ -57,24 +62,25 @@ uint64_t hatoi(const char *s)
 {
 	char *e;
 	long long i = strtoll(s, &e, 10);
+
 	switch (*e) {
-		case 't':
-		case 'T':
-			i *= 1024;
-		case 'g':
-		case 'G':
-			i *= 1024;
-		case 'm':
-		case 'M':
-			i *= 1024;
-		case 'k':
-		case 'K':
-			i *= 1024;
+	case 't':
+	case 'T':
+		i *= 1024;
+	case 'g':
+	case 'G':
+		i *= 1024;
+	case 'm':
+	case 'M':
+		i *= 1024;
+	case 'k':
+	case 'K':
+		i *= 1024;
 	}
 	return i;
 }
 
-unsigned hatoi_validate(const char *s, const char *msg)
+unsigned int hatoi_validate(const char *s, const char *msg)
 {
 	uint64_t v = hatoi(s);
 
@@ -127,6 +133,7 @@ ssize_t read_string_list(const char *buf, const char * const list[])
 {
 	size_t i;
 	char *s, *d = strdup(buf);
+
 	if (!d)
 		return -ENOMEM;
 
@@ -144,7 +151,7 @@ ssize_t read_string_list(const char *buf, const char * const list[])
 	return i;
 }
 
-void usage()
+void usage(void)
 {
 	fprintf(stderr,
 		   "Usage: make-bcache [options] device\n"
@@ -169,19 +176,23 @@ const char * const cache_replacement_policies[] = {
 	NULL
 };
 
-static void write_sb(char *dev, unsigned block_size, unsigned bucket_size,
-		     bool writeback, bool discard, bool wipe_bcache,
-		     unsigned cache_replacement_policy,
-		     uint64_t data_offset,
-		     uuid_t set_uuid, bool bdev)
+static void write_sb(char *dev, unsigned int block_size,
+			unsigned int bucket_size,
+			bool writeback, bool discard, bool wipe_bcache,
+			unsigned int cache_replacement_policy,
+			uint64_t data_offset,
+			uuid_t set_uuid, bool bdev)
 {
 	int fd;
 	char uuid_str[40], set_uuid_str[40], zeroes[SB_START] = {0};
 	struct cache_sb sb;
 	blkid_probe pr;
 
-	if ((fd = open(dev, O_RDWR|O_EXCL)) == -1) {
-		fprintf(stderr, "Can't open dev %s: %s\n", dev, strerror(errno));
+	fd = open(dev, O_RDWR|O_EXCL);
+
+	if (fd == -1) {
+		fprintf(stderr, "Can't open dev %s: %s\n",
+				dev, strerror(errno));
 		exit(EXIT_FAILURE);
 	}
 
@@ -189,12 +200,12 @@ static void write_sb(char *dev, unsigned block_size, unsigned bucket_size,
 		exit(EXIT_FAILURE);
 
 	if (!memcmp(sb.magic, bcache_magic, 16) && !wipe_bcache) {
-		fprintf(stderr, "Already a bcache device on %s, "
-			"overwrite with --wipe-bcache\n", dev);
+		fprintf(stderr, "Already a bcache device on %s,", dev);
+		fprintf(stderr, "overwrite with --wipe-bcache\n");
 		exit(EXIT_FAILURE);
 	}
-
-	if (!(pr = blkid_new_probe()))
+	pr = blkid_new_probe();
+	if (!pr)
 		exit(EXIT_FAILURE);
 	if (blkid_probe_set_device(pr, fd, 0, 0))
 		exit(EXIT_FAILURE);
@@ -203,8 +214,9 @@ static void write_sb(char *dev, unsigned block_size, unsigned bucket_size,
 		exit(EXIT_FAILURE);
 	if (!blkid_do_probe(pr)) {
 		/* XXX wipefs doesn't know how to remove partition tables */
-		fprintf(stderr, "Device %s already has a non-bcache superblock, "
-				"remove it using wipefs and wipefs -a\n", dev);
+		fprintf(stderr,
+			"Device %s already has a non-bcache superblock,", dev);
+		fprintf(stderr,	"remove it using wipefs and wipefs -a\n");
 		exit(EXIT_FAILURE);
 	}
 
@@ -226,8 +238,8 @@ static void write_sb(char *dev, unsigned block_size, unsigned bucket_size,
 	uuid_unparse(sb.set_uuid, set_uuid_str);
 
 	if (SB_IS_BDEV(&sb)) {
-		SET_BDEV_CACHE_MODE(
-			&sb, writeback ? CACHE_MODE_WRITEBACK : CACHE_MODE_WRITETHROUGH);
+		SET_BDEV_CACHE_MODE(&sb, writeback ?
+			CACHE_MODE_WRITEBACK : CACHE_MODE_WRITETHROUGH);
 
 		if (data_offset != BDEV_DATA_START_DEFAULT) {
 			sb.version = BCACHE_SB_VERSION_BDEV_WITH_OFFSET;
@@ -240,7 +252,7 @@ static void write_sb(char *dev, unsigned block_size, unsigned bucket_size,
 		       "block_size:		%u\n"
 		       "data_offset:		%ju\n",
 		       uuid_str, set_uuid_str,
-		       (unsigned) sb.version,
+		       (unsigned int) sb.version,
 		       sb.block_size,
 		       data_offset);
 	} else {
@@ -267,7 +279,7 @@ static void write_sb(char *dev, unsigned block_size, unsigned bucket_size,
 		       "nr_this_dev:		%u\n"
 		       "first_bucket:		%u\n",
 		       uuid_str, set_uuid_str,
-		       (unsigned) sb.version,
+		       (unsigned int) sb.version,
 		       sb.nbuckets,
 		       sb.block_size,
 		       sb.bucket_size,
@@ -293,7 +305,7 @@ static void write_sb(char *dev, unsigned block_size, unsigned bucket_size,
 	close(fd);
 }
 
-static unsigned get_blocksize(const char *path)
+static unsigned int get_blocksize(const char *path)
 {
 	struct stat statbuf;
 
@@ -324,29 +336,27 @@ static unsigned get_blocksize(const char *path)
 			exit(EXIT_FAILURE);
 		}
 		if (ioctl(fd, BLKSSZGET, &logical_block_size)) {
-			fprintf(stderr, "ioctl(%s, BLKSSZGET) failed: %m\n", path);
+			fprintf(stderr,
+				"ioctl(%s, BLKSSZGET) failed: %m\n", path);
 			exit(EXIT_FAILURE);
 		}
 		close(fd);
 		return logical_block_size / 512;
 
 	}
-	/* else: not a block device.
-	 * Why would we even want to write a bcache super block there? */
-
 	return statbuf.st_blksize / 512;
 }
 
 int make_bcache(int argc, char **argv)
 {
 	int c, bdev = -1;
-	unsigned i, ncache_devices = 0, nbacking_devices = 0;
+	unsigned int i, ncache_devices = 0, nbacking_devices = 0;
 	char *cache_devices[argc];
 	char *backing_devices[argc];
 
-	unsigned block_size = 0, bucket_size = 1024;
+	unsigned int block_size = 0, bucket_size = 1024;
 	int writeback = 0, discard = 0, wipe_bcache = 0;
-	unsigned cache_replacement_policy = 0;
+	unsigned int cache_replacement_policy = 0;
 	uint64_t data_offset = BDEV_DATA_START_DEFAULT;
 	uuid_t set_uuid;
 
@@ -400,7 +410,8 @@ int make_bcache(int argc, char **argv)
 		case 'o':
 			data_offset = atoll(optarg);
 			if (data_offset < BDEV_DATA_START_DEFAULT) {
-				fprintf(stderr, "Bad data offset; minimum %d sectors\n",
+				fprintf(stderr,
+					"Bad data offset; minimum %d sectors\n",
 				       BDEV_DATA_START_DEFAULT);
 				exit(EXIT_FAILURE);
 			}
@@ -433,7 +444,8 @@ int make_bcache(int argc, char **argv)
 	}
 
 	if (bucket_size < block_size) {
-		fprintf(stderr, "Bucket size cannot be smaller than block size\n");
+		fprintf(stderr,
+			"Bucket size cannot be smaller than block size\n");
 		exit(EXIT_FAILURE);
 	}
 

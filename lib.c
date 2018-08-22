@@ -1,12 +1,8 @@
-/*
- * Author: Shaoxiong Li <dahefanteng@gmail.com>
- *
- * GPLv2
- */
-
+// SPDX-License-Identifier: GPL-2.0
+// Author: Shaoxiong Li <dahefanteng@gmail.com>
 
 #include <stdbool.h>
-#include <blkid/blkid.h>
+#include <blkid.h>
 #include <dirent.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -14,9 +10,10 @@
 #include <fcntl.h>
 #include "bcache.h"
 #include "lib.h"
-#include <uuid/uuid.h>
+#include <uuid.h>
 #include <string.h>
 #include <malloc.h>
+#include <regex.h>
 
 
 /*
@@ -31,37 +28,124 @@ static void trim_prefix(char *dest, char *src, int num)
 static void get_tail(char *dest, char *src, int n)
 {
 	int num, i;
+
 	num = strlen(src);
-	for (i = 0; i < n; i++) {
+	for (i = 0; i < n; i++)
 		dest[i] = src[num - n + i];
-	}
 	dest[i] = '\0';
+}
+
+static void get_tail_compoment(char *dest, char *src)
+{
+	int num = strlen(src);
+	int i, index = 0;
+
+	for (i = 0; i < num; i++) {
+		if (src[i] == '/')
+			index = i + 1;
+	}
+	strcpy(dest, src + index);
 }
 
 static void trim_tail(char *src, int n)
 {
 	int num;
+
 	num = strlen(src);
 	src[num - n] = '\0';
+}
+
+bool prefix_with(char *dst, char *prefix)
+{
+	int length = strlen(prefix);
+
+	if (length > strlen(dst))
+		return false;
+	int i;
+
+	for (i = 0; i < length; i++) {
+		if (prefix[i] != dst[i])
+			return false;
+	}
+	return true;
+}
+
+bool part_of_disk(char *devname, char *partname)
+{
+	char pattern[40];
+	int status;
+	regmatch_t regmatche;
+	regex_t reg;
+
+	sprintf(pattern, "^%s.*[0-9]$", devname);
+	if (regcomp(&reg, pattern, REG_EXTENDED) != 0)
+		fprintf(stderr, "Error happen when compile reg");
+	status = regexec(&reg, partname, 1, &regmatche, 0);
+	regfree(&reg);
+	if (status == REG_NOMATCH)
+		return false;
+	else
+		return true;
+}
+
+int find_location(char *location, char *devname)
+{
+	char path[300];
+	DIR *blockdir, *bcachedir, *partdir = NULL;
+	struct dirent *ptr;
+
+	blockdir = opendir("/sys/block");
+	if (blockdir == NULL) {
+		fprintf(stderr, "Failed to open dir /sys/block/");
+		return 1;
+	}
+	sprintf(path, "/sys/block/%s/bcache", devname);
+	bcachedir = opendir(path);
+	if (bcachedir != NULL) {
+		strcpy(location, devname);
+		closedir(bcachedir);
+		return 0;
+	}
+	while ((ptr = readdir(blockdir)) != NULL) {
+		if (prefix_with(devname, ptr->d_name)) {
+			sprintf(path, "/sys/block/%s/%s", ptr->d_name,
+				devname);
+			partdir = opendir(path);
+			if (partdir != NULL) {
+				sprintf(location, "%s/%s", ptr->d_name,
+					devname);
+				closedir(partdir);
+				break;
+			}
+		}
+	}
+	closedir(blockdir);
+	return 0;
 }
 
 
 int get_backdev_state(char *devname, char *state)
 {
 	FILE *fd;
-	char path[100];
+	int ret;
+	char path[150];
+	char location[100];
 	char buf[40];
+
 	trim_prefix(buf, devname, DEV_PREFIX_LEN);
-	sprintf(path, "/sys/block/%s/bcache/state", buf);
+	ret = find_location(location, buf);
+	if (ret < 0)
+		return ret;
+	sprintf(path, "/sys/block/%s/bcache/state", location);
 	fd = fopen(path, "r");
 	if (fd == NULL) {
 		strcpy(state, BCACHE_BASIC_STATE_INACTIVE);
 		return 0;
 	}
 	int i = 0;
-	while ((state[i] = getc(fd)) != '\n') {
+
+	while ((state[i] = getc(fd)) != '\n')
 		i++;
-	}
 	state[i] = '\0';
 	fclose(fd);
 	return 0;
@@ -71,13 +155,13 @@ int get_cachedev_state(char *cset_id, char *state)
 {
 	DIR *dir = NULL;
 	char path[100];
+
 	sprintf(path, "/sys/fs/bcache/%s/", cset_id);
 	dir = opendir(path);
-	if (dir == NULL) {
+	if (dir == NULL)
 		strcpy(state, BCACHE_BASIC_STATE_INACTIVE);
-	} else {
+	else
 		strcpy(state, BCACHE_BASIC_STATE_ACTIVE);
-	}
 	closedir(dir);
 	return 0;
 }
@@ -85,31 +169,35 @@ int get_cachedev_state(char *cset_id, char *state)
 int get_state(struct dev *dev, char *state)
 {
 	if (dev->version == BCACHE_SB_VERSION_CDEV
-	    || dev->version == BCACHE_SB_VERSION_CDEV_WITH_UUID) {
+	    || dev->version == BCACHE_SB_VERSION_CDEV_WITH_UUID)
 		return get_cachedev_state(dev->cset, state);
-	} else if (dev->version == BCACHE_SB_VERSION_BDEV
-		   || dev->version == BCACHE_SB_VERSION_BDEV_WITH_OFFSET) {
+	else if (dev->version == BCACHE_SB_VERSION_BDEV
+		   || dev->version == BCACHE_SB_VERSION_BDEV_WITH_OFFSET)
 		return get_backdev_state(dev->name, state);
-	} else {
+	else
 		return 1;
-	}
 }
 
 
 int get_dev_bname(char *devname, char *bname)
 {
 	int ret;
-	char path[100];
+	char path[150];
+	char location[100];
 	char buf[40];
 	char link[100];
+
 	trim_prefix(buf, devname, DEV_PREFIX_LEN);
-	sprintf(path, "/sys/block/%s/bcache/dev", buf);
+	ret = find_location(location, buf);
+	if (ret < 0)
+		return ret;
+	sprintf(path, "/sys/block/%s/bcache/dev", location);
 	ret = readlink(path, link, sizeof(link));
-	if (ret < 0) {
+	if (ret < 0)
 		strcpy(bname, BCACHE_BNAME_NOT_EXIST);
-	} else {
+	else {
 		trim_tail(link, strlen(link) - ret);
-		strcpy(bname, link + 41);
+		get_tail_compoment(bname, link);
 	}
 	return 0;
 }
@@ -117,28 +205,32 @@ int get_dev_bname(char *devname, char *bname)
 int get_bname(struct dev *dev, char *bname)
 {
 	if (dev->version == BCACHE_SB_VERSION_CDEV
-	    || dev->version == BCACHE_SB_VERSION_CDEV_WITH_UUID) {
+	    || dev->version == BCACHE_SB_VERSION_CDEV_WITH_UUID)
 		strcpy(bname, BCACHE_NO_SUPPORT);
-	} else if (dev->version == BCACHE_SB_VERSION_BDEV
-		   || dev->version == BCACHE_SB_VERSION_BDEV_WITH_OFFSET) {
+	else if (dev->version == BCACHE_SB_VERSION_BDEV
+		   || dev->version == BCACHE_SB_VERSION_BDEV_WITH_OFFSET)
 		return get_dev_bname(dev->name, bname);
-	}
 	return 0;
 }
 
 int get_backdev_attachpoint(char *devname, char *point)
 {
 	int ret;
-	char path[100];
+	char path[150];
+	char location[100];
 	char buf[20];
 	char link[100];
 	char uuid[40];
+
 	trim_prefix(buf, devname, DEV_PREFIX_LEN);
-	sprintf(path, "/sys/block/%s/bcache/cache", buf);
+	ret = find_location(location, buf);
+	if (ret < 0)
+		return ret;
+	sprintf(path, "/sys/block/%s/bcache/cache", location);
 	ret = readlink(path, link, sizeof(link));
-	if (ret < 0) {
+	if (ret < 0)
 		strcpy(point, BCACHE_BNAME_NOT_EXIST);
-	} else {
+	else {
 		trim_tail(link, strlen(link) - ret);
 		get_tail(uuid, link, 36);
 		strcpy(point, uuid);
@@ -149,24 +241,23 @@ int get_backdev_attachpoint(char *devname, char *point)
 int get_point(struct dev *dev, char *point)
 {
 	if (dev->version == BCACHE_SB_VERSION_CDEV
-	    || dev->version == BCACHE_SB_VERSION_CDEV_WITH_UUID) {
+	    || dev->version == BCACHE_SB_VERSION_CDEV_WITH_UUID)
 		strcpy(point, BCACHE_NO_SUPPORT);
-	} else if (dev->version == BCACHE_SB_VERSION_BDEV
-		   || dev->version == BCACHE_SB_VERSION_BDEV_WITH_OFFSET) {
+	else if (dev->version == BCACHE_SB_VERSION_BDEV
+		   || dev->version == BCACHE_SB_VERSION_BDEV_WITH_OFFSET)
 		return get_backdev_attachpoint(dev->name, point);
-	}
 	return 0;
 }
 
 int cset_to_devname(struct list_head *head, char *cset, char *devname)
 {
 	struct dev *dev;
+
 	list_for_each_entry(dev, head, dev_list) {
 		if ((dev->version == BCACHE_SB_VERSION_CDEV
 		     || dev->version == BCACHE_SB_VERSION_CDEV_WITH_UUID)
-		    && strcmp(dev->cset, cset) == 0) {
+		    && strcmp(dev->cset, cset) == 0)
 			strcpy(devname, dev->name);
-		}
 	}
 	return 0;
 }
@@ -175,6 +266,7 @@ int cset_to_devname(struct list_head *head, char *cset, char *devname)
 int detail_base(char *devname, struct cache_sb sb, struct dev *base)
 {
 	int ret;
+
 	strcpy(base->name, devname);
 	base->magic = "ok";
 	base->first_sector = SB_SECTOR;
@@ -188,15 +280,18 @@ int detail_base(char *devname, struct cache_sb sb, struct dev *base)
 	uuid_unparse(sb.set_uuid, base->cset);
 	base->sectors_per_block = sb.block_size;
 	base->sectors_per_bucket = sb.bucket_size;
-	if ((ret = get_state(base, base->state)) != 0) {
+	ret = get_state(base, base->state);
+	if (ret != 0) {
 		fprintf(stderr, "Failed to get state for %s\n", devname);
 		return ret;
 	}
-	if ((ret = get_bname(base, base->bname)) != 0) {
+	ret = get_bname(base, base->bname);
+	if (ret != 0) {
 		fprintf(stderr, "Failed to get bname for %s\n", devname);
 		return ret;
 	}
-	if ((ret = get_point(base, base->attachuuid)) != 0) {
+	ret = get_point(base, base->attachuuid);
+	if (ret != 0) {
 		fprintf(stderr, "Failed to get attachuuid for  %s\n",
 			devname);
 		return ret;
@@ -204,11 +299,48 @@ int detail_base(char *devname, struct cache_sb sb, struct dev *base)
 	return 0;
 }
 
+
+int may_add_item(char *devname, struct list_head *head)
+{
+	struct cache_sb sb;
+
+	if (strcmp(devname, ".") == 0 || strcmp(devname, "..") == 0)
+		return 0;
+	char dev[261];
+
+	sprintf(dev, "/dev/%s", devname);
+	int fd = open(dev, O_RDONLY);
+
+	if (fd == -1)
+		return 0;
+	if (pread(fd, &sb, sizeof(sb), SB_START) != sizeof(sb)) {
+		close(fd);
+		return 0;
+	}
+	if (memcmp(sb.magic, bcache_magic, 16)) {
+		close(fd);
+		return 0;
+	}
+	struct dev *tmp;
+	int ret;
+
+	tmp = (struct dev *) malloc(DEVLEN);
+	ret = detail_base(dev, sb, tmp);
+	if (ret != 0) {
+		fprintf(stderr, "Failed to get information for %s\n", dev);
+		return 1;
+	}
+	list_add_tail(&tmp->dev_list, head);
+	return 0;
+}
+
 int list_bdevs(struct list_head *head)
 {
-	DIR *dir;
-	struct dirent *ptr;
-	struct cache_sb sb;
+	int ret;
+	DIR *dir, *subdir;
+	struct dirent *ptr, *subptr;
+	char path[300];
+
 	dir = opendir("/sys/block");
 	if (dir == NULL) {
 		fprintf(stderr, "Unable to open dir /sys/block\n");
@@ -216,35 +348,27 @@ int list_bdevs(struct list_head *head)
 	}
 	while ((ptr = readdir(dir)) != NULL) {
 		if (strcmp(ptr->d_name, ".") == 0
-		    || strcmp(ptr->d_name, "..") == 0) {
+			|| strcmp(ptr->d_name, "..") == 0)
 			continue;
-		}
-		char dev[20];
-		sprintf(dev, "/dev/%s", ptr->d_name);
-		int fd = open(dev, O_RDONLY);
-		if (fd == -1) {
-			continue;
-		}
-
-		if (pread(fd, &sb, sizeof(sb), SB_START) != sizeof(sb)) {
-			close(fd);
-			continue;
-		}
-		if (memcmp(sb.magic, bcache_magic, 16)) {
-			close(fd);
-			continue;
-		}
-		struct dev *tmp;
-		int ret;
-		tmp = (struct dev *) malloc(DEVLEN);
-		ret = detail_base(dev, sb, tmp);
-		if (ret != 0) {
-			fprintf(stderr,
-				"Failed to get information for %s\n", dev);
+		sprintf(path, "/sys/block/%s", ptr->d_name);
+		subdir = opendir(path);
+		if (subdir == NULL) {
+			fprintf(stderr, "Unable to open dir /sys/block\n");
 			return 1;
-		} else {
-			list_add_tail(&tmp->dev_list, head);
 		}
+		while ((subptr = readdir(subdir)) != NULL) {
+			if (strcmp(subptr->d_name, ".") == 0
+				|| strcmp(subptr->d_name, "..") == 0)
+				continue;
+			if (part_of_disk(ptr->d_name, subptr->d_name)) {
+				ret = may_add_item(subptr->d_name, head);
+				if (ret != 0)
+					return ret;
+			}
+		}
+		ret = may_add_item(ptr->d_name, head);
+		if (ret != 0)
+			return ret;
 	}
 	closedir(dir);
 	return 0;
@@ -255,6 +379,7 @@ int detail_dev(char *devname, struct bdev *bd, struct cdev *cd, int *type)
 	struct cache_sb sb;
 	uint64_t expected_csum;
 	int fd = open(devname, O_RDONLY);
+
 	if (fd < 0) {
 		fprintf(stderr, "Error: Can't open dev  %s\n", devname);
 		return 1;
@@ -271,13 +396,13 @@ int detail_dev(char *devname, struct bdev *bd, struct cdev *cd, int *type)
 		goto Fail;
 	}
 
-	if (!sb.offset == SB_SECTOR) {
+	if (!(sb.offset == SB_SECTOR)) {
 		fprintf(stderr, "Invalid superblock (bad sector)\n");
 		goto Fail;
 	}
 
 	expected_csum = csum_set(&sb);
-	if (!sb.csum == expected_csum) {
+	if (!(sb.csum == expected_csum)) {
 		fprintf(stderr, "Csum is not match with expected one");
 		goto Fail;
 	}
@@ -304,14 +429,15 @@ int detail_dev(char *devname, struct bdev *bd, struct cdev *cd, int *type)
 		goto Fail;
 	}
 	return 0;
-      Fail:
+Fail:
 	close(fd);
 	return 1;
 }
 
-int regist(char *devname)
+int register_dev(char *devname)
 {
 	int fd;
+
 	fd = open("/sys/fs/bcache/register", O_WRONLY);
 	if (fd < 0) {
 		perror("Error opening /sys/fs/bcache/register");
@@ -329,10 +455,11 @@ int regist(char *devname)
 	return 0;
 }
 
-int unregist_cset(char *cset)
+int unregister_cset(char *cset)
 {
 	int fd;
 	char path[100];
+
 	sprintf(path, "/sys/fs/bcache/%s/unregister", cset);
 	fd = open(path, O_WRONLY);
 	if (fd < 0) {
@@ -350,11 +477,16 @@ int unregist_cset(char *cset)
 
 int stop_backdev(char *devname)
 {
-	char path[100];
-	int fd;
+	char path[150];
+	char location[100];
+	int fd, ret;
 	char buf[20];
+
 	trim_prefix(buf, devname, DEV_PREFIX_LEN);
-	sprintf(path, "/sys/block/%s/bcache/stop", buf);
+	ret = find_location(location, buf);
+	if (ret < 0)
+		return ret;
+	sprintf(path, "/sys/block/%s/bcache/stop", location);
 	fd = open(path, O_WRONLY);
 	if (fd < 0) {
 		fprintf(stderr, "Can't open %s\n", path);
@@ -369,10 +501,12 @@ int stop_backdev(char *devname)
 	return 0;
 }
 
-int unregist_both(char *cset)
+//preserved for future use
+int unregister_both(char *cset)
 {
 	int fd;
 	char path[100];
+
 	sprintf(path, "/sys/fs/bcache/%s/stop", cset);
 	fd = open(path, O_WRONLY);
 	if (fd < 0) {
@@ -388,13 +522,18 @@ int unregist_both(char *cset)
 	return 0;
 }
 
-int attach(char *cset, char *devname)
+int attach_backdev(char *cset, char *devname)
 {
-	int fd;
+	int fd, ret;
 	char buf[20];
+	char location[100];
+	char path[150];
+
 	trim_prefix(buf, devname, DEV_PREFIX_LEN);
-	char path[100];
-	sprintf(path, "/sys/block/%s/bcache/attach", buf);
+	ret = find_location(location, buf);
+	if (ret < 0)
+		return ret;
+	sprintf(path, "/sys/block/%s/bcache/attach", location);
 	fd = open(path, O_WRONLY);
 	if (fd < 0) {
 		fprintf(stderr, "Can't open %s:%m\n", path);
@@ -409,13 +548,18 @@ int attach(char *cset, char *devname)
 	return 0;
 }
 
-int detach(char *devname)
+int detach_backdev(char *devname)
 {
-	int fd;
+	int fd, ret;
 	char buf[20];
+	char path[150];
+	char location[100];
+
 	trim_prefix(buf, devname, DEV_PREFIX_LEN);
-	char path[100];
-	sprintf(path, "/sys/block/%s/bcache/detach", buf);
+	ret = find_location(location, buf);
+	if (ret < 0)
+		return ret;
+	sprintf(path, "/sys/block/%s/bcache/detach", location);
 	fd = open(path, O_WRONLY);
 	if (fd < 0) {
 		fprintf(stderr,
@@ -434,11 +578,16 @@ int detach(char *devname)
 
 int set_backdev_cachemode(char *devname, char *cachemode)
 {
-	int fd;
-	char path[100];
+	int fd, ret;
+	char path[150];
+	char location[100];
 	char buf[20];
+
 	trim_prefix(buf, devname, DEV_PREFIX_LEN);
-	sprintf(path, "/sys/block/%s/bcache/cache_mode", buf);
+	ret = find_location(location, buf);
+	if (ret < 0)
+		return ret;
+	sprintf(path, "/sys/block/%s/bcache/cache_mode", location);
 	fd = open(path, O_WRONLY);
 	if (fd < 0) {
 		fprintf(stderr,
@@ -458,9 +607,14 @@ int set_backdev_cachemode(char *devname, char *cachemode)
 
 int get_backdev_cachemode(char *devname, char *mode)
 {
-	int fd;
-	char path[100];
-	sprintf(path, "/sys/block/%s/bcache/cache_mode", devname);
+	int fd, ret;
+	char path[150];
+	char location[100];
+
+	ret = find_location(location, devname);
+	if (ret < 0)
+		return ret;
+	sprintf(path, "/sys/block/%s/bcache/cache_mode", location);
 	fd = open(path, O_RDONLY);
 	if (fd < 0) {
 		perror("Error opening /sys/fs/bcache/register");
@@ -468,7 +622,6 @@ int get_backdev_cachemode(char *devname, char *mode)
 			"The bcache kernel module must be loaded\n");
 		return 1;
 	}
-	printf("size in func is %d", sizeof(mode));
 	if (read(fd, mode, 100) < 0) {
 		fprintf(stderr, "Failed to fetch device cache mode\n");
 		close(fd);
