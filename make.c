@@ -246,15 +246,18 @@ static void write_sb(char *dev, unsigned int block_size,
 			sb.data_offset = data_offset;
 		}
 
+		printf("Name			%s\n", dev);
+		printf("Type			data\n");
 		printf("UUID:			%s\n"
 		       "Set UUID:		%s\n"
 		       "version:		%u\n"
-		       "block_size:		%u\n"
-		       "data_offset:		%ju\n",
+		       "block_size_in_sectors:	%u\n"
+		       "data_offset_in_sectors:	%ju\n",
 		       uuid_str, set_uuid_str,
 		       (unsigned int) sb.version,
 		       sb.block_size,
 		       data_offset);
+		putchar('\n');
 	} else {
 		sb.nbuckets		= getblocks(fd) / sb.bucket_size;
 		sb.nr_in_set		= 1;
@@ -269,12 +272,14 @@ static void write_sb(char *dev, unsigned int block_size,
 		SET_CACHE_DISCARD(&sb, discard);
 		SET_CACHE_REPLACEMENT(&sb, cache_replacement_policy);
 
+		printf("Name			%s\n", dev);
+		printf("Type			cache\n");
 		printf("UUID:			%s\n"
 		       "Set UUID:		%s\n"
 		       "version:		%u\n"
 		       "nbuckets:		%ju\n"
-		       "block_size:		%u\n"
-		       "bucket_size:		%u\n"
+		       "block_size_in_sectors:	%u\n"
+		       "bucket_size_in_sectors:	%u\n"
 		       "nr_in_set:		%u\n"
 		       "nr_this_dev:		%u\n"
 		       "first_bucket:		%u\n",
@@ -286,6 +291,7 @@ static void write_sb(char *dev, unsigned int block_size,
 		       sb.nr_in_set,
 		       sb.nr_this_dev,
 		       sb.first_bucket);
+		putchar('\n');
 	}
 
 	sb.csum = csum_set(&sb);
