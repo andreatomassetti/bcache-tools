@@ -32,6 +32,6 @@ bcache-super-show: bcache.o
 bcache-register: bcache-register.o
 
 bcache: CFLAGS += `pkg-config --cflags blkid uuid smartcols`
-bcache: LDFLAGS += `pkg-config --libs blkid uuid smartcols`
+bcache: LDLIBS += `pkg-config --libs blkid uuid smartcols`
 bcache: CFLAGS += -std=gnu99
 bcache: bcache-main.o bcache.o lib.o make.o
