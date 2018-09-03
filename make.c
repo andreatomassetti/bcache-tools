@@ -33,6 +33,7 @@
 #include <uuid/uuid.h>
 
 #include "bcache.h"
+#include "lib.h"
 
 #define max(x, y) ({				\
 	typeof(x) _max1 = (x);			\
@@ -164,6 +165,7 @@ void usage(void)
 //	       "	-U			UUID\n"
 	       "	    --writeback		enable writeback\n"
 	       "	    --discard		enable discards\n"
+	       "	    --force		reformat a bcache device even if it is running\n"
 	       "	    --cache_replacement_policy=(lru|fifo)\n"
 	       "	-h, --help		display this help and exit\n");
 	exit(EXIT_FAILURE);
@@ -181,7 +183,7 @@ static void write_sb(char *dev, unsigned int block_size,
 			bool writeback, bool discard, bool wipe_bcache,
 			unsigned int cache_replacement_policy,
 			uint64_t data_offset,
-			uuid_t set_uuid, bool bdev)
+			uuid_t set_uuid, bool bdev, bool force)
 {
 	int fd;
 	char uuid_str[40], set_uuid_str[40], zeroes[SB_START] = {0};
@@ -191,18 +193,76 @@ static void write_sb(char *dev, unsigned int block_size,
 	fd = open(dev, O_RDWR|O_EXCL);
 
 	if (fd == -1) {
-		fprintf(stderr, "Can't open dev %s: %s\n",
-				dev, strerror(errno));
-		exit(EXIT_FAILURE);
+		if ((errno == 16) && force) {
+			struct bdev bd;
+			struct cdev cd;
+			int type = 1;
+			int ret;
+
+			ret = detail_dev(dev, &bd, &cd, &type);
+			if (ret != 0)
+				exit(EXIT_FAILURE);
+			if (type == BCACHE_SB_VERSION_BDEV) {
+				ret = stop_backdev(dev);
+			} else if (type == BCACHE_SB_VERSION_CDEV
+				|| type == BCACHE_SB_VERSION_CDEV_WITH_UUID) {
+				ret = unregister_cset(cd.base.cset);
+			} else {
+				fprintf(stderr,
+					"%s,And this is not a bcache device.\n",
+					strerror(errno));
+				exit(EXIT_FAILURE);
+			}
+			if (ret != 0)
+				exit(EXIT_FAILURE);
+			int i;
+			bool opened;
+
+			for (i = 0; i < 3; i++) {
+				sleep(3);
+				fd = open(dev, O_RDWR|O_EXCL);
+				if (fd == -1) {
+					fprintf(stdout,
+						"Waiting for bcache device to be closed.\n");
+				} else {
+					opened = true;
+					break;
+				}
+			}
+			if (!opened) {
+				fprintf(stderr,
+					"Bcache devices has not completely closed,");
+				fprintf(stderr, "you can try it sooner.\n");
+				exit(EXIT_FAILURE);
+			}
+		} else {
+			fprintf(stderr, "Can't open dev %s: %s\n",
+					dev, strerror(errno));
+			exit(EXIT_FAILURE);
+		}
 	}
+
+	if (force)
+		wipe_bcache = true;
 
 	if (pread(fd, &sb, sizeof(sb), SB_START) != sizeof(sb))
 		exit(EXIT_FAILURE);
 
-	if (!memcmp(sb.magic, bcache_magic, 16) && !wipe_bcache) {
-		fprintf(stderr, "Already a bcache device on %s,", dev);
-		fprintf(stderr, "overwrite with --wipe-bcache\n");
-		exit(EXIT_FAILURE);
+	if (!memcmp(sb.magic, bcache_magic, 16)) {
+		if (wipe_bcache) {
+			if (pwrite(fd, zeroes, sizeof(sb),
+				SB_START) != sizeof(sb)) {
+				fprintf(stderr,
+					"Failed to erase super block for %s",
+					dev);
+				exit(EXIT_FAILURE);
+			}
+		} else {
+			fprintf(stderr, "Already a bcache device on %s,", dev);
+			fprintf(stderr,
+				"overwrite with --wipe-bcache or --force\n");
+			exit(EXIT_FAILURE);
+		}
 	}
 	pr = blkid_new_probe();
 	if (!pr)
@@ -361,7 +421,7 @@ int make_bcache(int argc, char **argv)
 	char *backing_devices[argc];
 
 	unsigned int block_size = 0, bucket_size = 1024;
-	int writeback = 0, discard = 0, wipe_bcache = 0;
+	int writeback = 0, discard = 0, wipe_bcache = 0, force = 0;
 	unsigned int cache_replacement_policy = 0;
 	uint64_t data_offset = BDEV_DATA_START_DEFAULT;
 	uuid_t set_uuid;
@@ -382,6 +442,7 @@ int make_bcache(int argc, char **argv)
 		{ "data-offset",	1, NULL,	'o' },
 		{ "cset-uuid",		1, NULL,	'u' },
 		{ "help",		0, NULL,	'h' },
+		{ "force",		0, &force,	 1 },
 		{ NULL,			0, NULL,	0 },
 	};
 
@@ -469,13 +530,13 @@ int make_bcache(int argc, char **argv)
 		write_sb(cache_devices[i], block_size, bucket_size,
 			 writeback, discard, wipe_bcache,
 			 cache_replacement_policy,
-			 data_offset, set_uuid, false);
+			 data_offset, set_uuid, false, force);
 
 	for (i = 0; i < nbacking_devices; i++)
 		write_sb(backing_devices[i], block_size, bucket_size,
 			 writeback, discard, wipe_bcache,
 			 cache_replacement_policy,
-			 data_offset, set_uuid, true);
+			 data_offset, set_uuid, true, force);
 
 	return 0;
 }

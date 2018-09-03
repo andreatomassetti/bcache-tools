@@ -129,7 +129,7 @@ int get_backdev_state(char *devname, char *state)
 	FILE *fd;
 	int ret;
 	char path[150];
-	char location[100];
+	char location[100] = "";
 	char buf[40];
 
 	trim_prefix(buf, devname, DEV_PREFIX_LEN);
@@ -148,6 +148,29 @@ int get_backdev_state(char *devname, char *state)
 		i++;
 	state[i] = '\0';
 	fclose(fd);
+
+	int fd_run;
+
+	sprintf(path, "/sys/block/%s/bcache/running", location);
+	fd_run = open(path, O_RDONLY);
+	if (fd_run < 0) {
+		fprintf(stderr,
+			"Failed to open %s\n", path);
+		return 1;
+	}
+
+	char running[20];
+	int num;
+
+	num = read(fd_run, running, 10);
+	if (num < 0) {
+		fprintf(stderr, "Failed to fetch running infomation\n");
+		close(fd_run);
+		return 1;
+	}
+	close(fd_run);
+	if (running[0] == '1')
+		strcat(state, "(running)");
 	return 0;
 }
 
@@ -183,7 +206,7 @@ int get_dev_bname(char *devname, char *bname)
 {
 	int ret;
 	char path[150];
-	char location[100];
+	char location[100] = "";
 	char buf[40];
 	char link[100];
 
@@ -217,7 +240,7 @@ int get_backdev_attachpoint(char *devname, char *point)
 {
 	int ret;
 	char path[150];
-	char location[100];
+	char location[100] = "";
 	char buf[20];
 	char link[100];
 	char uuid[40];
@@ -478,7 +501,7 @@ int unregister_cset(char *cset)
 int stop_backdev(char *devname)
 {
 	char path[150];
-	char location[100];
+	char location[100] = "";
 	int fd, ret;
 	char buf[20];
 
@@ -526,7 +549,7 @@ int attach_backdev(char *cset, char *devname)
 {
 	int fd, ret;
 	char buf[20];
-	char location[100];
+	char location[100] = "";
 	char path[150];
 
 	trim_prefix(buf, devname, DEV_PREFIX_LEN);
@@ -553,7 +576,7 @@ int detach_backdev(char *devname)
 	int fd, ret;
 	char buf[20];
 	char path[150];
-	char location[100];
+	char location[100] = "";
 
 	trim_prefix(buf, devname, DEV_PREFIX_LEN);
 	ret = find_location(location, buf);
@@ -580,7 +603,7 @@ int set_backdev_cachemode(char *devname, char *cachemode)
 {
 	int fd, ret;
 	char path[150];
-	char location[100];
+	char location[100] = "";
 	char buf[20];
 
 	trim_prefix(buf, devname, DEV_PREFIX_LEN);
@@ -609,7 +632,7 @@ int get_backdev_cachemode(char *devname, char *mode)
 {
 	int fd, ret;
 	char path[150];
-	char location[100];
+	char location[100] = "";
 
 	ret = find_location(location, devname);
 	if (ret < 0)

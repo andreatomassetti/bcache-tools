@@ -170,7 +170,7 @@ int show_bdevs_detail(void)
 		return ret;
 	}
 	printf("Name\t\tUuid\t\t\t\t\tCset_Uuid\t\t\t\tType\t\tState");
-	printf("\t\tBname\t\tAttachToDev\tAttachToCset\n");
+	printf("\t\t\tBname\t\tAttachToDev\tAttachToCset\n");
 	list_for_each_entry(devs, &head, dev_list) {
 		printf("%s\t%s\t%s\t%lu", devs->name, devs->uuid,
 		       devs->cset, devs->version);
@@ -180,21 +180,17 @@ int show_bdevs_detail(void)
 		case BCACHE_SB_VERSION_CDEV_WITH_UUID:
 			printf(" (cache)");
 			break;
-
 			// The second adds data offset supporet
 		case BCACHE_SB_VERSION_BDEV:
 		case BCACHE_SB_VERSION_BDEV_WITH_OFFSET:
 			printf(" (data)");
 			break;
-
 		default:
 			printf(" (unknown)");
 			break;
 		}
-
-		printf("\t%-8s", devs->state);
+		printf("\t%-16s", devs->state);
 		printf("\t%-16s", devs->bname);
-
 		char attachdev[30];
 
 		if (strlen(devs->attachuuid) == 36) {
@@ -207,7 +203,6 @@ int show_bdevs_detail(void)
 			strcpy(attachdev, BCACHE_ATTACH_ALONE);
 		}
 		printf("%-16s", attachdev);
-
 		printf("%s", devs->attachuuid);
 		putchar('\n');
 	}
@@ -230,7 +225,7 @@ int show_bdevs(void)
 		return ret;
 	}
 
-	printf("Name\t\tType\t\tState\t\tBname\t\tAttachToDev\n");
+	printf("Name\t\tType\t\tState\t\t\tBname\t\tAttachToDev\n");
 	list_for_each_entry(devs, &head, dev_list) {
 		printf("%s\t%lu", devs->name, devs->version);
 		switch (devs->version) {
@@ -251,7 +246,7 @@ int show_bdevs(void)
 			break;
 		}
 
-		printf("\t%-8s", devs->state);
+		printf("\t%-16s", devs->state);
 		printf("\t%-16s", devs->bname);
 
 		char attachdev[30];
