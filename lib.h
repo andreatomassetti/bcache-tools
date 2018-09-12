@@ -48,6 +48,7 @@ int unregister_cset(char *cset);
 int attach_backdev(char *cset, char *devname);
 int detach_backdev(char *devname);
 int set_backdev_cachemode(char *devname, char *cachemode);
+int set_label(char *devname, char *label);
 int cset_to_devname(struct list_head *head, char *cset, char *devname);
 
 

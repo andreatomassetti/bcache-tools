@@ -79,7 +79,7 @@ bool part_of_disk(char *devname, char *partname)
 
 	sprintf(pattern, "^%s.*[0-9]$", devname);
 	if (regcomp(&reg, pattern, REG_EXTENDED) != 0)
-		fprintf(stderr, "Error happen when compile reg");
+		fprintf(stderr, "Error happen when compile reg\n");
 	status = regexec(&reg, partname, 1, &regmatche, 0);
 	regfree(&reg);
 	if (status == REG_NOMATCH)
@@ -96,7 +96,7 @@ int find_location(char *location, char *devname)
 
 	blockdir = opendir("/sys/block");
 	if (blockdir == NULL) {
-		fprintf(stderr, "Failed to open dir /sys/block/");
+		fprintf(stderr, "Failed to open dir /sys/block/\n");
 		return 1;
 	}
 	sprintf(path, "/sys/block/%s/bcache", devname);
@@ -426,7 +426,7 @@ int detail_dev(char *devname, struct bdev *bd, struct cdev *cd, int *type)
 
 	expected_csum = csum_set(&sb);
 	if (!(sb.csum == expected_csum)) {
-		fprintf(stderr, "Csum is not match with expected one");
+		fprintf(stderr, "Csum is not match with expected one\n");
 		goto Fail;
 	}
 
@@ -448,7 +448,7 @@ int detail_dev(char *devname, struct bdev *bd, struct cdev *cd, int *type)
 		cd->pos = sb.nr_this_dev;
 		cd->replacement = CACHE_REPLACEMENT(&sb);
 	} else {
-		fprintf(stderr, "Unknown bcache device type found");
+		fprintf(stderr, "Unknown bcache device type found\n");
 		goto Fail;
 	}
 	return 0;
@@ -490,7 +490,7 @@ int unregister_cset(char *cset)
 		return 1;
 	}
 	if (dprintf(fd, "%d\n", 1) < 0) {
-		fprintf(stderr, "Failed to unregist this cache device");
+		fprintf(stderr, "Failed to unregister this cache device\n");
 		close(fd);
 		return 1;
 	}
@@ -537,7 +537,7 @@ int unregister_both(char *cset)
 		return 1;
 	}
 	if (dprintf(fd, "%d\n", 1) < 0) {
-		fprintf(stderr, "Failed to stop cset and its backends %m");
+		fprintf(stderr, "Failed to stop cset and its backends %m\n");
 		close(fd);
 		return 1;
 	}
@@ -592,7 +592,7 @@ int detach_backdev(char *devname)
 	}
 	if (dprintf(fd, "%d\n", 1) < 0) {
 		close(fd);
-		fprintf(stderr, "Error detach device %s:%m", devname);
+		fprintf(stderr, "Error detach device %s:%m\n", devname);
 		return 1;
 	}
 	close(fd);
@@ -619,7 +619,7 @@ int set_backdev_cachemode(char *devname, char *cachemode)
 		return 1;
 	}
 	if (dprintf(fd, "%s\n", cachemode) < 0) {
-		printf("Failed to set cachemode for device %s:%m\n",
+		fprintf(stderr, "Failed to set cachemode for device %s:%m\n",
 		       devname);
 		close(fd);
 		return 1;
@@ -647,6 +647,35 @@ int get_backdev_cachemode(char *devname, char *mode)
 	}
 	if (read(fd, mode, 100) < 0) {
 		fprintf(stderr, "Failed to fetch device cache mode\n");
+		close(fd);
+		return 1;
+	}
+	close(fd);
+	return 0;
+}
+
+int set_label(char *devname, char *label)
+{
+	int fd, ret;
+	char path[150];
+	char location[100] = "";
+	char buf[20];
+
+	trim_prefix(buf, devname, DEV_PREFIX_LEN);
+	ret = find_location(location, buf);
+	if (ret < 0)
+		return ret;
+	sprintf(path, "/sys/block/%s/bcache/label", location);
+	fd = open(path, O_WRONLY);
+	if (fd < 0) {
+		fprintf(stderr,
+			"Can't open %s,Make sure the device name is correct\n",
+			path);
+		return 1;
+	}
+	if (dprintf(fd, "%s\n", label) < 0) {
+		fprintf(stderr, "Failed to set label for device %s:%m\n",
+		       devname);
 		close(fd);
 		return 1;
 	}

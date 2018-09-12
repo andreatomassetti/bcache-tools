@@ -52,7 +52,7 @@ bool bad_uuid(char *uuid)
 	regmatch_t regmatche;
 
 	if (regcomp(&reg, pattern, REG_EXTENDED) != 0)
-		fprintf(stderr, "Error happen when check uuid format:%m");
+		fprintf(stderr, "Error happen when check uuid format:%m\n");
 	status = regexec(&reg, uuid, 1, &regmatche, 0);
 	regfree(&reg);
 	if (status == REG_NOMATCH)
@@ -70,7 +70,7 @@ bool bad_dev(char *devname)
 
 	if (regcomp(&reg, pattern, REG_EXTENDED) != 0) {
 		fprintf(stderr,
-			"Error happen when check device name format:%m");
+			"Error happen when check device name format:%m\n");
 	}
 	status = regexec(&reg, devname, 1, &regmatche, 0);
 	regfree(&reg);
@@ -92,7 +92,8 @@ int main_usage(void)
 		"	unregister	unregister device from kernel\n"
 		"	attach		attach backend device(data device) to cache device\n"
 		"	detach		detach backend device(data device) from cache device\n"
-		"	set-cachemode	set cachemode for backend device\n");
+		"	set-cachemode	set cachemode for backend device\n"
+		"	set-label	set label for backend device\n");
 	return EXIT_FAILURE;
 }
 
@@ -146,6 +147,12 @@ int setcachemode_usage(void)
 	return EXIT_FAILURE;
 }
 
+int setlabel_usage(void)
+{
+	fprintf(stderr,
+		"Usage:set-label devicename label\n(only for backend device)\n");
+	return EXIT_FAILURE;
+}
 
 void free_dev(struct list_head *head)
 {
@@ -462,7 +469,7 @@ int attach_both(char *cdev, char *backdev)
 		ret = detail_dev(cdev, &bd, &cd, &type);
 		if (type != BCACHE_SB_VERSION_CDEV
 		    && type != BCACHE_SB_VERSION_CDEV_WITH_UUID) {
-			fprintf(stderr, "%s is not an cache device", cdev);
+			fprintf(stderr, "%s is not an cache device\n", cdev);
 			return 1;
 		}
 		strcpy(buf, cd.base.cset);
@@ -472,10 +479,24 @@ int attach_both(char *cdev, char *backdev)
 	return attach_backdev(buf, backdev);
 }
 
+bool has_permission(void)
+{
+	uid_t euid = geteuid();
+
+	if (euid != 0)
+		return false;
+	return true;
+}
+
 int main(int argc, char **argv)
 {
 	char *subcmd;
 
+	if (!has_permission()) {
+		fprintf(stderr,
+		"Only root or users who has root priviledges can run this command\n");
+		return 1;
+	}
 	if (argc < 2) {
 		main_usage();
 		return 1;
@@ -592,7 +613,18 @@ int main(int argc, char **argv)
 			fprintf(stderr, "Error:Wrong device name found\n");
 			return 1;
 		}
-		return set_backdev_cachemode(argv[1], argv[2]);
+	} else if (strcmp(subcmd, "set-label") == 0) {
+		if (argc != 3)
+			return setlabel_usage();
+		if (bad_dev(argv[1])) {
+			fprintf(stderr, "Error:Wrong device name found\n");
+			return 1;
+		}
+		if (strlen(argv[2]) >= SB_LABEL_SIZE) {
+			fprintf(stderr, "Label is too long\n");
+			return 1;
+		}
+		return set_label(argv[1], argv[2]);
 	}
 	main_usage();
 	return 0;

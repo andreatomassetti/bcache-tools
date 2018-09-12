@@ -166,6 +166,7 @@ void usage(void)
 	       "	    --writeback		enable writeback\n"
 	       "	    --discard		enable discards\n"
 	       "	    --force		reformat a bcache device even if it is running\n"
+	       "	-l, --label		set label for device\n"
 	       "	    --cache_replacement_policy=(lru|fifo)\n"
 	       "	-h, --help		display this help and exit\n");
 	exit(EXIT_FAILURE);
@@ -183,7 +184,7 @@ static void write_sb(char *dev, unsigned int block_size,
 			bool writeback, bool discard, bool wipe_bcache,
 			unsigned int cache_replacement_policy,
 			uint64_t data_offset,
-			uuid_t set_uuid, bool bdev, bool force)
+			uuid_t set_uuid, bool bdev, bool force, char *label)
 {
 	int fd;
 	char uuid_str[40], set_uuid_str[40], zeroes[SB_START] = {0};
@@ -253,7 +254,7 @@ static void write_sb(char *dev, unsigned int block_size,
 			if (pwrite(fd, zeroes, sizeof(sb),
 				SB_START) != sizeof(sb)) {
 				fprintf(stderr,
-					"Failed to erase super block for %s",
+					"Failed to erase super block for %s\n",
 					dev);
 				exit(EXIT_FAILURE);
 			}
@@ -354,8 +355,15 @@ static void write_sb(char *dev, unsigned int block_size,
 		putchar('\n');
 	}
 
-	sb.csum = csum_set(&sb);
+	/* write label */
+	int num, i;
 
+	num = strlen(label);
+	for (i = 0; i < num; i++)
+		sb.label[i] = label[i];
+	sb.label[i] = '\0';
+	/* write csum */
+	sb.csum = csum_set(&sb);
 	/* Zero start of disk */
 	if (pwrite(fd, zeroes, SB_START, 0) != SB_START) {
 		perror("write error\n");
@@ -419,7 +427,7 @@ int make_bcache(int argc, char **argv)
 	unsigned int i, ncache_devices = 0, nbacking_devices = 0;
 	char *cache_devices[argc];
 	char *backing_devices[argc];
-
+	char label[SB_LABEL_SIZE];
 	unsigned int block_size = 0, bucket_size = 1024;
 	int writeback = 0, discard = 0, wipe_bcache = 0, force = 0;
 	unsigned int cache_replacement_policy = 0;
@@ -443,11 +451,12 @@ int make_bcache(int argc, char **argv)
 		{ "cset-uuid",		1, NULL,	'u' },
 		{ "help",		0, NULL,	'h' },
 		{ "force",		0, &force,	 1 },
+		{ "label",		1, NULL,	 'l' },
 		{ NULL,			0, NULL,	0 },
 	};
 
 	while ((c = getopt_long(argc, argv,
-				"-hCBUo:w:b:",
+				"-hCBUo:w:b:l:",
 				opts, NULL)) != -1)
 		switch (c) {
 		case 'C':
@@ -488,6 +497,13 @@ int make_bcache(int argc, char **argv)
 				fprintf(stderr, "Bad uuid\n");
 				exit(EXIT_FAILURE);
 			}
+			break;
+		case 'l':
+			if (strlen(optarg) >= SB_LABEL_SIZE) {
+				fprintf(stderr, "Label is too long\n");
+				exit(EXIT_FAILURE);
+			}
+			strcpy(label, optarg);
 			break;
 		case 'h':
 			usage();
@@ -530,13 +546,13 @@ int make_bcache(int argc, char **argv)
 		write_sb(cache_devices[i], block_size, bucket_size,
 			 writeback, discard, wipe_bcache,
 			 cache_replacement_policy,
-			 data_offset, set_uuid, false, force);
+			 data_offset, set_uuid, false, force, label);
 
 	for (i = 0; i < nbacking_devices; i++)
 		write_sb(backing_devices[i], block_size, bucket_size,
 			 writeback, discard, wipe_bcache,
 			 cache_replacement_policy,
-			 data_offset, set_uuid, true, force);
+			 data_offset, set_uuid, true, force, label);
 
 	return 0;
 }
