@@ -669,8 +669,7 @@ int set_label(char *devname, char *label)
 	fd = open(path, O_WRONLY);
 	if (fd < 0) {
 		fprintf(stderr,
-			"Can't open %s,Make sure the device name is correct\n",
-			path);
+			"Please register this device first\n");
 		return 1;
 	}
 	if (dprintf(fd, "%s\n", label) < 0) {

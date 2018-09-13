@@ -452,7 +452,7 @@ int attach_both(char *cdev, char *backdev)
 	char buf[100];
 
 	ret = detail_dev(backdev, &bd, &cd, &type);
-	if (ret < 0)
+	if (ret != 0)
 		return ret;
 	if (type != BCACHE_SB_VERSION_BDEV
 	    && type != BCACHE_SB_VERSION_BDEV_WITH_OFFSET) {
@@ -613,11 +613,46 @@ int main(int argc, char **argv)
 			fprintf(stderr, "Error:Wrong device name found\n");
 			return 1;
 		}
+		struct bdev bd;
+		struct cdev cd;
+		int type = 1;
+		int ret;
+
+		ret = detail_dev(argv[1], &bd, &cd, &type);
+		if (ret != 0) {
+			fprintf(stderr,
+		"This device doesn't exist or failed to receive info from this device\n");
+			return ret;
+		}
+		if (type != BCACHE_SB_VERSION_BDEV
+		    && type != BCACHE_SB_VERSION_BDEV_WITH_OFFSET) {
+			fprintf(stderr,
+				"Only backend device is suppported\n");
+			return 1;
+		}
+		return set_backdev_cachemode(argv[1], argv[2]);
 	} else if (strcmp(subcmd, "set-label") == 0) {
 		if (argc != 3)
 			return setlabel_usage();
 		if (bad_dev(argv[1])) {
 			fprintf(stderr, "Error:Wrong device name found\n");
+			return 1;
+		}
+		struct bdev bd;
+		struct cdev cd;
+		int type = 5;
+		int ret;
+
+		ret = detail_dev(argv[1], &bd, &cd, &type);
+		if (ret != 0) {
+			fprintf(stderr,
+		"This device doesn't exist or failed to receive info from this device\n");
+			return ret;
+		}
+		if (type != BCACHE_SB_VERSION_BDEV
+		    && type != BCACHE_SB_VERSION_BDEV_WITH_OFFSET) {
+			fprintf(stderr,
+				"Only backend device is suppported\n");
 			return 1;
 		}
 		if (strlen(argv[2]) >= SB_LABEL_SIZE) {
