@@ -308,6 +308,7 @@ static void write_sb(char *dev, unsigned int block_size,
 		}
 
 		printf("Name			%s\n", dev);
+		printf("Label			%s\n", label);
 		printf("Type			data\n");
 		printf("UUID:			%s\n"
 		       "Set UUID:		%s\n"
@@ -334,6 +335,7 @@ static void write_sb(char *dev, unsigned int block_size,
 		SET_CACHE_REPLACEMENT(&sb, cache_replacement_policy);
 
 		printf("Name			%s\n", dev);
+		printf("Label			%s\n", label);
 		printf("Type			cache\n");
 		printf("UUID:			%s\n"
 		       "Set UUID:		%s\n"
