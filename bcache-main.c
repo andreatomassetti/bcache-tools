@@ -16,6 +16,7 @@
 #include "libsmartcols.h"
 #include <locale.h>
 #include "list.h"
+#include <limits.h>
 
 
 //utils function
@@ -61,8 +62,16 @@ bool bad_uuid(char *uuid)
 		return false;
 }
 
-bool bad_dev(char *devname)
+bool bad_dev(char **devname)
 {
+
+	char *ptr = realpath(*devname, NULL);
+
+	if (ptr == NULL) {
+		fprintf(stderr, "Error:Failed to resolve device name\n");
+		return true;
+	}
+	*devname = ptr;
 	char *pattern = "^/dev/[a-zA-Z0-9-]*$";
 	regex_t reg;
 	int status;
@@ -72,7 +81,7 @@ bool bad_dev(char *devname)
 		fprintf(stderr,
 			"Error happen when check device name format:%m\n");
 	}
-	status = regexec(&reg, devname, 1, &regmatche, 0);
+	status = regexec(&reg, *devname, 1, &regmatche, 0);
 	regfree(&reg);
 	if (status == REG_NOMATCH)
 		return true;
@@ -504,11 +513,11 @@ int main(int argc, char **argv)
 	subcmd = argv[1];
 	argc--;
 	argv += 1;
+	char *devname = NULL;
 	if (strcmp(subcmd, "make") == 0)
 		return make_bcache(argc, argv);
 	else if (strcmp(subcmd, "show") == 0) {
 		int o = 0;
-		char devname[40];
 		int more = 0;
 		int device = 0;
 		int help = 0;
@@ -526,7 +535,7 @@ int main(int argc, char **argv)
 				    &option_index)) != EOF) {
 			switch (o) {
 			case 'd':
-				strcpy(devname, optarg);
+				devname = optarg;
 				device = 1;
 				break;
 			case 'm':
@@ -545,7 +554,7 @@ int main(int argc, char **argv)
 		} else if (more) {
 			return show_bdevs_detail();
 		} else if (device) {
-			if (bad_dev(devname)) {
+			if (bad_dev(&devname)) {
 				fprintf(stderr,
 					"Error:Wrong device name found\n");
 				return 1;
@@ -561,15 +570,17 @@ int main(int argc, char **argv)
 	} else if (strcmp(subcmd, "register") == 0) {
 		if (argc != 2 || strcmp(argv[1], "-h") == 0)
 			return register_usage();
-		if (bad_dev(argv[1])) {
+		devname = argv[1];
+		if (bad_dev(&devname)) {
 			fprintf(stderr, "Error:Wrong device name found\n");
 			return 1;
 		}
-		return register_dev(argv[1]);
+		return register_dev(devname);
 	} else if (strcmp(subcmd, "unregister") == 0) {
 		if (argc != 2 || strcmp(argv[1], "-h") == 0)
 			return unregister_usage();
-		if (bad_dev(argv[1])) {
+		devname = argv[1];
+		if (bad_dev(&devname)) {
 			fprintf(stderr, "Error:Wrong device name found\n");
 			return 1;
 		}
@@ -578,11 +589,11 @@ int main(int argc, char **argv)
 		int type = 1;
 		int ret;
 
-		ret = detail_dev(argv[1], &bd, &cd, &type);
+		ret = detail_dev(devname, &bd, &cd, &type);
 		if (ret != 0)
 			return ret;
 		if (type == BCACHE_SB_VERSION_BDEV) {
-			return stop_backdev(argv[1]);
+			return stop_backdev(devname);
 		} else if (type == BCACHE_SB_VERSION_CDEV
 			   || type == BCACHE_SB_VERSION_CDEV_WITH_UUID) {
 			return unregister_cset(cd.base.cset);
@@ -591,25 +602,30 @@ int main(int argc, char **argv)
 	} else if (strcmp(subcmd, "attach") == 0) {
 		if (argc != 3 || strcmp(argv[1], "-h") == 0)
 			return attach_usage();
-		if ((bad_dev(argv[1]) && bad_uuid(argv[1]))
-		    || bad_dev(argv[2])) {
+		devname = argv[2];
+		char *attachto = argv[1];
+
+		if ((bad_uuid(attachto) && bad_dev(&attachto))
+			|| bad_dev(&devname)) {
 			fprintf(stderr,
-				"Error:Wrong device name or cache_set uuid found\n");
+			"Error:Wrong device name or cache_set uuid found\n");
 			return 1;
 		}
-		return attach_both(argv[1], argv[2]);
+		return attach_both(attachto, devname);
 	} else if (strcmp(subcmd, "detach") == 0) {
 		if (argc != 2 || strcmp(argv[1], "-h") == 0)
 			return detach_usage();
-		if (bad_dev(argv[1])) {
+		devname = argv[1];
+		if (bad_dev(&devname)) {
 			fprintf(stderr, "Error:Wrong device name found\n");
 			return 1;
 		}
-		return detach_backdev(argv[1]);
+		return detach_backdev(devname);
 	} else if (strcmp(subcmd, "set-cachemode") == 0) {
 		if (argc != 3)
 			return setcachemode_usage();
-		if (bad_dev(argv[1])) {
+		devname = argv[1];
+		if (bad_dev(&devname)) {
 			fprintf(stderr, "Error:Wrong device name found\n");
 			return 1;
 		}
@@ -618,10 +634,10 @@ int main(int argc, char **argv)
 		int type = 1;
 		int ret;
 
-		ret = detail_dev(argv[1], &bd, &cd, &type);
+		ret = detail_dev(devname, &bd, &cd, &type);
 		if (ret != 0) {
 			fprintf(stderr,
-		"This device doesn't exist or failed to receive info from this device\n");
+			"This device doesn't exist or failed to receive info from this device\n");
 			return ret;
 		}
 		if (type != BCACHE_SB_VERSION_BDEV
@@ -630,11 +646,12 @@ int main(int argc, char **argv)
 				"Only backend device is suppported\n");
 			return 1;
 		}
-		return set_backdev_cachemode(argv[1], argv[2]);
+		return set_backdev_cachemode(devname, argv[2]);
 	} else if (strcmp(subcmd, "set-label") == 0) {
 		if (argc != 3)
 			return setlabel_usage();
-		if (bad_dev(argv[1])) {
+		devname = argv[1];
+		if (bad_dev(&devname)) {
 			fprintf(stderr, "Error:Wrong device name found\n");
 			return 1;
 		}
@@ -643,7 +660,7 @@ int main(int argc, char **argv)
 		int type = 5;
 		int ret;
 
-		ret = detail_dev(argv[1], &bd, &cd, &type);
+		ret = detail_dev(devname, &bd, &cd, &type);
 		if (ret != 0) {
 			fprintf(stderr,
 		"This device doesn't exist or failed to receive info from this device\n");
@@ -659,7 +676,7 @@ int main(int argc, char **argv)
 			fprintf(stderr, "Label is too long\n");
 			return 1;
 		}
-		return set_label(argv[1], argv[2]);
+		return set_label(devname, argv[2]);
 	}
 	main_usage();
 	return 0;
