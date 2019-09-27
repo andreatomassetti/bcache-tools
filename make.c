@@ -179,6 +179,48 @@ const char * const cache_replacement_policies[] = {
 	NULL
 };
 
+int blkdiscard_all(char *path, int fd)
+{
+	printf("%s blkdiscard beginning...", path);
+	fflush(stdout);
+
+	uint64_t end, blksize, secsize, range[2];
+	struct stat sb;
+
+	range[0] = 0;
+	range[1] = ULLONG_MAX;
+
+	if (fstat(fd, &sb) == -1)
+		goto err;
+
+	if (!S_ISBLK(sb.st_mode))
+		goto err;
+
+	if (ioctl(fd, BLKGETSIZE64, &blksize))
+		goto err;
+
+	if (ioctl(fd, BLKSSZGET, &secsize))
+		goto err;
+
+	/* align range to the sector size */
+	range[0] = (range[0] + secsize - 1) & ~(secsize - 1);
+	range[1] &= ~(secsize - 1);
+
+	/* is the range end behind the end of the device ?*/
+	end = range[0] + range[1];
+	if (end < range[0] || end > blksize)
+		range[1] = blksize - range[0];
+
+	if (ioctl(fd, BLKDISCARD, &range))
+		goto err;
+
+	printf("done\n");
+	return 0;
+err:
+	printf("\r                                ");
+	return -1;
+}
+
 static void write_sb(char *dev, unsigned int block_size,
 			unsigned int bucket_size,
 			bool writeback, bool discard, bool wipe_bcache,
@@ -354,6 +396,10 @@ static void write_sb(char *dev, unsigned int block_size,
 		       sb.nr_in_set,
 		       sb.nr_this_dev,
 		       sb.first_bucket);
+
+		/* Attempting to discard cache device
+		 */
+		blkdiscard_all(dev, fd);
 		putchar('\n');
 	}
 
@@ -429,7 +475,7 @@ int make_bcache(int argc, char **argv)
 	unsigned int i, ncache_devices = 0, nbacking_devices = 0;
 	char *cache_devices[argc];
 	char *backing_devices[argc];
-	char label[SB_LABEL_SIZE];
+	char label[SB_LABEL_SIZE] = { 0 };
 	unsigned int block_size = 0, bucket_size = 1024;
 	int writeback = 0, discard = 0, wipe_bcache = 0, force = 0;
 	unsigned int cache_replacement_policy = 0;
