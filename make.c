@@ -34,6 +34,7 @@
 
 #include "bcache.h"
 #include "lib.h"
+#include "bitwise.h"
 
 #define max(x, y) ({				\
 	typeof(x) _max1 = (x);			\
@@ -221,6 +222,35 @@ err:
 	return -1;
 }
 
+static void swap_sb(struct cache_sb *sb, int write_cdev_super)
+{
+	int i;
+
+	/* swap to little endian byte order to write */
+	sb->offset		= cpu_to_le64(sb->offset);
+	sb->version		= cpu_to_le64(sb->version);
+	sb->flags		= cpu_to_le64(sb->flags);
+	sb->seq			= cpu_to_le64(sb->seq);
+	sb->last_mount		= cpu_to_le32(sb->last_mount);
+	sb->first_bucket	= cpu_to_le16(sb->first_bucket);
+	sb->keys		= cpu_to_le16(sb->keys);
+	sb->block_size		= cpu_to_le16(sb->block_size);
+
+	for (i = 0; i < SB_JOURNAL_BUCKETS; i++)
+		sb->d[i]	= cpu_to_le64(sb->d[i]);
+
+	if (write_cdev_super) {
+		/* Cache devices */
+		sb->nbuckets	= cpu_to_le64(sb->nbuckets);
+		sb->bucket_size	= cpu_to_le16(sb->bucket_size);
+		sb->nr_in_set	= cpu_to_le16(sb->nr_in_set);
+		sb->nr_this_dev	= cpu_to_le16(sb->nr_this_dev);
+	} else {
+		/* Backing devices */
+		sb->data_offset	= cpu_to_le64(sb->data_offset);
+	}
+}
+
 static void write_sb(char *dev, unsigned int block_size,
 			unsigned int bucket_size,
 			bool writeback, bool discard, bool wipe_bcache,
@@ -232,6 +262,7 @@ static void write_sb(char *dev, unsigned int block_size,
 	char uuid_str[40], set_uuid_str[40], zeroes[SB_START] = {0};
 	struct cache_sb sb;
 	blkid_probe pr;
+	int write_cdev_super = 1;
 
 	fd = open(dev, O_RDWR|O_EXCL);
 
@@ -341,6 +372,8 @@ static void write_sb(char *dev, unsigned int block_size,
 	uuid_unparse(sb.set_uuid, set_uuid_str);
 
 	if (SB_IS_BDEV(&sb)) {
+		write_cdev_super = 0;
+
 		SET_BDEV_CACHE_MODE(&sb, writeback ?
 			CACHE_MODE_WRITEBACK : CACHE_MODE_WRITETHROUGH);
 
@@ -410,6 +443,13 @@ static void write_sb(char *dev, unsigned int block_size,
 	for (i = 0; i < num; i++)
 		sb.label[i] = label[i];
 	sb.label[i] = '\0';
+
+	/*
+	 * Swap native bytes order to little endian for writing
+	 * the super block out.
+	 */
+	swap_sb(&sb, write_cdev_super);
+
 	/* write csum */
 	sb.csum = csum_set(&sb);
 	/* Zero start of disk */
