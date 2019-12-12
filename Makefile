@@ -21,14 +21,18 @@ clean:
 	$(RM) -f bcache make-bcache probe-bcache bcache-super-show bcache-register bcache-test -- *.o
 
 bcache-test: LDLIBS += `pkg-config --libs openssl` -lm
-make-bcache: LDLIBS += `pkg-config --libs uuid blkid`
-make-bcache: CFLAGS += `pkg-config --cflags uuid blkid`
-make-bcache: bcache.o
+
+make-bcache: LDLIBS += `pkg-config --libs uuid blkid smartcols`
+make-bcache: CFLAGS += `pkg-config --cflags uuid blkid smartcols`
+make-bcache: make.o bcache.o lib.o 
+
 probe-bcache: LDLIBS += `pkg-config --libs uuid blkid`
 probe-bcache: CFLAGS += `pkg-config --cflags uuid blkid`
+
 bcache-super-show: LDLIBS += `pkg-config --libs uuid`
 bcache-super-show: CFLAGS += -std=gnu99
 bcache-super-show: bcache.o
+
 bcache-register: bcache-register.o
 
 bcache: CFLAGS += `pkg-config --cflags blkid uuid smartcols`

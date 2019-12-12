@@ -10,10 +10,10 @@
 #include <unistd.h>
 #include <getopt.h>
 #include <regex.h>
+#include <libsmartcols/libsmartcols.h>
 #include "bcache.h"
 #include "lib.h"
 #include "make.h"
-#include "libsmartcols.h"
 #include <locale.h>
 #include "list.h"
 #include <limits.h>
