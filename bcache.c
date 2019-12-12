@@ -19,6 +19,8 @@
 #include <limits.h>
 
 
+#define BCACHE_TOOLS_VERSION	"1.1"
+
 //utils function
 static bool accepted_char(char c)
 {
@@ -160,6 +162,13 @@ int setlabel_usage(void)
 {
 	fprintf(stderr,
 		"Usage:set-label devicename label\n(only for backend device)\n");
+	return EXIT_FAILURE;
+}
+
+int version_usagee(void)
+{
+	fprintf(stderr,
+		"Usage: version		display software version\n");
 	return EXIT_FAILURE;
 }
 
@@ -677,7 +686,14 @@ int main(int argc, char **argv)
 			return 1;
 		}
 		return set_label(devname, argv[2]);
+	} else if (strcmp(subcmd, "version") == 0) {
+		if (argc != 1)
+			return version_usagee();
+		printf("bcache-tools %s\n", BCACHE_TOOLS_VERSION);
+
+		return 0;
 	}
+
 	main_usage();
 	return 0;
 }
