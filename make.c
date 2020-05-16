@@ -35,6 +35,7 @@
 #include "bcache.h"
 #include "lib.h"
 #include "bitwise.h"
+#include "zoned.h"
 
 #define max(x, y) ({				\
 	typeof(x) _max1 = (x);			\
@@ -636,11 +637,15 @@ int make_bcache(int argc, char **argv)
 			 cache_replacement_policy,
 			 data_offset, set_uuid, false, force, label);
 
-	for (i = 0; i < nbacking_devices; i++)
+	for (i = 0; i < nbacking_devices; i++) {
+		check_data_offset_for_zoned_device(backing_devices[i],
+						   &data_offset);
+
 		write_sb(backing_devices[i], block_size, bucket_size,
 			 writeback, discard, wipe_bcache,
 			 cache_replacement_policy,
 			 data_offset, set_uuid, true, force, label);
+	}
 
 	return 0;
 }
