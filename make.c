@@ -378,6 +378,19 @@ static void write_sb(char *dev, unsigned int block_size,
 		SET_BDEV_CACHE_MODE(&sb, writeback ?
 			CACHE_MODE_WRITEBACK : CACHE_MODE_WRITETHROUGH);
 
+		/*
+		 * Currently bcache does not support writeback mode for
+		 * zoned device as backing device. If the cache mode is
+		 * explicitly set to writeback, automatically convert to
+		 * writethough mode.
+		 */
+		if (is_zoned_device(dev) &&
+		    BDEV_CACHE_MODE(&sb) == CACHE_MODE_WRITEBACK) {
+			printf("Zoned device %s detected: convert to writethrough mode.\n\n",
+				dev);
+			SET_BDEV_CACHE_MODE(&sb, CACHE_MODE_WRITETHROUGH);
+		}
+
 		if (data_offset != BDEV_DATA_START_DEFAULT) {
 			sb.version = BCACHE_SB_VERSION_BDEV_WITH_OFFSET;
 			sb.data_offset = data_offset;
