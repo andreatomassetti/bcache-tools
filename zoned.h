@@ -9,5 +9,6 @@
 #define __ZONED_H
 
 void check_data_offset_for_zoned_device(char *devname, uint64_t *data_offset);
+int is_zoned_device(char *devname);
 
 #endif

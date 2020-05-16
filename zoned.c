@@ -87,3 +87,8 @@ void check_data_offset_for_zoned_device(char *devname,
 
 	*data_offset = _data_offset;
 }
+
+int is_zoned_device(char *devname)
+{
+	return (get_zone_size(devname) != 0);
+}
