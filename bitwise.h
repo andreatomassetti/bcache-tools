@@ -45,11 +45,21 @@
 #define cpu_to_le16(val)	((__le16)(val))
 #define cpu_to_le32(val)	((__le32)(val))
 #define cpu_to_le64(val)	((__le64)(val))
+
+#define le16_to_cpu(val)	((__le16)(val))
+#define le32_to_cpu(val)	((__le32)(val))
+#define le64_to_cpu(val)	((__le64)(val))
+
 #else
 /* For big endian */
 #define cpu_to_le16(val)	((__be16)__swab16((__u16)(val)))
 #define cpu_to_le32(val)	((__be32)__swab32((__u32)(val)))
 #define cpu_to_le64(val)	((__be64)__swab64((__u64)(val)))
+
+#define le16_to_cpu(val)	((__be16)__swab16((__u16)(val)))
+#define le32_to_cpu(val)	((__be32)__swab32((__u32)(val)))
+#define le64_to_cpu(val)	((__be64)__swab64((__u64)(val)))
+
 #endif
 
 #endif
