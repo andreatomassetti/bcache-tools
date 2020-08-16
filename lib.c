@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <blkid.h>
 #include <dirent.h>
+#include <limits.h>
 #include <sys/types.h>
 #include <unistd.h>
 #include <stdio.h>
@@ -736,6 +737,10 @@ struct cache_sb *to_cache_sb(struct cache_sb *sb,
 		sb->feature_ro_compat = le64_to_cpu(sb_disk->feature_ro_compat);
 	}
 
+	if (sb->version >= BCACHE_SB_VERSION_CDEV_WITH_FEATURES &&
+	    bch_has_feature_large_bucket(sb))
+		sb->bucket_size += le16_to_cpu(sb_disk->bucket_size_hi) << 16;
+
 	return sb;
 }
 
@@ -784,5 +789,19 @@ struct cache_sb_disk *to_cache_sb_disk(struct cache_sb_disk *sb_disk,
 		sb_disk->feature_ro_compat = cpu_to_le64(sb->feature_ro_compat);
 	}
 
+	if (sb->version >= BCACHE_SB_VERSION_CDEV_WITH_FEATURES &&
+	    bch_has_feature_large_bucket(sb))
+		sb_disk->bucket_size_hi = cpu_to_le16(sb->bucket_size >> 16);
+
 	return sb_disk;
+}
+
+void set_bucket_size(struct cache_sb *sb, unsigned int bucket_size)
+{
+	if (bucket_size > USHRT_MAX) {
+		sb->version = BCACHE_SB_VERSION_CDEV_WITH_FEATURES;
+		bch_set_feature_large_bucket(sb);
+	}
+
+	sb->bucket_size = bucket_size;
 }

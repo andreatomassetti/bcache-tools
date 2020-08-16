@@ -100,6 +100,7 @@ struct cache_sb_disk {
 		__le16		keys;
 	};
 	__le64			d[SB_JOURNAL_BUCKETS];	/* journal buckets */
+	__le16			bucket_size_hi;
 };
 
 /*
@@ -210,6 +211,11 @@ uint64_t crc64(const void *data, size_t len);
 #define BCH_HAS_INCOMPAT_FEATURE(sb, mask) \
 		((sb)->feature_incompat & (mask))
 
+/* Feature set definition */
+
+/* Incompat feature set */
+#define BCH_FEATURE_INCOMPAT_LARGE_BUCKET	0x0001 /* 32bit bucket size */
+
 #define BCH_FEATURE_COMPAT_FUNCS(name, flagname) \
 static inline int bch_has_feature_##name(struct cache_sb *sb) \
 { \
@@ -260,5 +266,7 @@ static inline void bch_clear_feature_##name(struct cache_sb *sb) \
 	(sb)->feature_incompat &= \
 		~BCH##_FEATURE_INCOMPAT_##flagname; \
 }
+
+BCH_FEATURE_INCOMPAT_FUNCS(large_bucket, LARGE_BUCKET);
 
 #endif

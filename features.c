@@ -18,5 +18,7 @@ struct feature {
 };
 
 static struct feature feature_list[] = {
+	{BCH_FEATURE_INCOMPAT, BCH_FEATURE_INCOMPAT_LARGE_BUCKET,
+		"large_bucket"},
 	{0, 0, 0 },
 };

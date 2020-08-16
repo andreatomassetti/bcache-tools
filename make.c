@@ -83,7 +83,9 @@ uint64_t hatoi(const char *s)
 	return i;
 }
 
-unsigned int hatoi_validate(const char *s, const char *msg)
+unsigned int hatoi_validate(const char *s,
+			    const char *msg,
+			    unsigned long max)
 {
 	uint64_t v = hatoi(s);
 
@@ -94,7 +96,7 @@ unsigned int hatoi_validate(const char *s, const char *msg)
 
 	v /= 512;
 
-	if (v > USHRT_MAX) {
+	if (v > max) {
 		fprintf(stderr, "%s too large\n", msg);
 		exit(EXIT_FAILURE);
 	}
@@ -338,7 +340,7 @@ static void write_sb(char *dev, unsigned int block_size,
 	uuid_generate(sb.uuid);
 	memcpy(sb.set_uuid, set_uuid, sizeof(sb.set_uuid));
 
-	sb.bucket_size	= bucket_size;
+	set_bucket_size(&sb, bucket_size);
 	sb.block_size	= block_size;
 
 	uuid_unparse(sb.uuid, uuid_str);
@@ -362,7 +364,8 @@ static void write_sb(char *dev, unsigned int block_size,
 		}
 
 		if (data_offset != BDEV_DATA_START_DEFAULT) {
-			sb.version = BCACHE_SB_VERSION_BDEV_WITH_OFFSET;
+			if (sb.version < BCACHE_SB_VERSION_BDEV_WITH_OFFSET)
+				sb.version = BCACHE_SB_VERSION_BDEV_WITH_OFFSET;
 			sb.data_offset = data_offset;
 		}
 
@@ -382,6 +385,7 @@ static void write_sb(char *dev, unsigned int block_size,
 	} else {
 		sb.nbuckets		= getblocks(fd) / sb.bucket_size;
 		sb.nr_in_set		= 1;
+		/* 23 is (SB_SECTOR + SB_SIZE) - 1 sectors */
 		sb.first_bucket		= (23 / sb.bucket_size) + 1;
 
 		if (sb.nbuckets < 1 << 7) {
@@ -538,10 +542,12 @@ int make_bcache(int argc, char **argv)
 			bdev = 1;
 			break;
 		case 'b':
-			bucket_size = hatoi_validate(optarg, "bucket size");
+			bucket_size =
+				hatoi_validate(optarg, "bucket size", UINT_MAX);
 			break;
 		case 'w':
-			block_size = hatoi_validate(optarg, "block size");
+			block_size =
+				hatoi_validate(optarg, "block size", USHRT_MAX);
 			break;
 #if 0
 		case 'U':
