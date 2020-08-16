@@ -8,14 +8,14 @@
 #include <unistd.h>
 #include <stdio.h>
 #include <fcntl.h>
-#include "bcache.h"
-#include "lib.h"
 #include <uuid.h>
 #include <string.h>
 #include <malloc.h>
 #include <regex.h>
 
-
+#include "bcache.h"
+#include "lib.h"
+#include "bitwise.h"
 /*
  * utils function
  */
@@ -680,4 +680,89 @@ int set_label(char *devname, char *label)
 	}
 	close(fd);
 	return 0;
+}
+
+
+struct cache_sb *to_cache_sb(struct cache_sb *sb,
+			     struct cache_sb_disk *sb_disk)
+{
+	/* Convert common part */
+	sb->offset = le64_to_cpu(sb_disk->offset);
+	sb->version = le64_to_cpu(sb_disk->version);
+	memcpy(sb->magic, sb_disk->magic, 16);
+	memcpy(sb->uuid, sb_disk->uuid, 16);
+	memcpy(sb->set_uuid, sb_disk->set_uuid, 16);
+	memcpy(sb->label, sb_disk->label, SB_LABEL_SIZE);
+	sb->flags = le64_to_cpu(sb_disk->flags);
+	sb->seq = le64_to_cpu(sb_disk->seq);
+	sb->block_size = le16_to_cpu(sb_disk->block_size);
+	sb->last_mount = le32_to_cpu(sb_disk->last_mount);
+	sb->first_bucket = le16_to_cpu(sb_disk->first_bucket);
+	sb->keys = le16_to_cpu(sb_disk->keys);
+
+	/* For cache or backing devices*/
+
+	if (sb->version > BCACHE_SB_MAX_VERSION) {
+		/* Unsupported version */
+		fprintf(stderr, "Unsupported super block version: %lld\n",
+			sb->version);
+	} else if (SB_IS_BDEV(sb)) {
+		/* Backing device */
+		sb->data_offset = le64_to_cpu(sb_disk->data_offset);
+	} else {
+		int i;
+
+		/* Cache device */
+		sb->nbuckets = le64_to_cpu(sb_disk->nbuckets);
+		sb->nr_in_set = le16_to_cpu(sb_disk->nr_in_set);
+		sb->nr_this_dev = le16_to_cpu(sb_disk->nr_this_dev);
+		sb->bucket_size = le32_to_cpu(sb_disk->bucket_size);
+
+		for (i = 0; i < SB_JOURNAL_BUCKETS; i++)
+			sb->d[i]= le64_to_cpu(sb_disk->d[i]);
+	}
+
+	return sb;
+}
+
+struct cache_sb_disk *to_cache_sb_disk(struct cache_sb_disk *sb_disk,
+				       struct cache_sb *sb)
+{
+	/* Convert common part */
+	sb_disk->offset = cpu_to_le64(sb->offset);
+	sb_disk->version = cpu_to_le64(sb->version);
+	memcpy(sb_disk->magic, sb->magic, 16);
+	memcpy(sb_disk->uuid, sb->uuid, 16);
+	memcpy(sb_disk->set_uuid, sb->set_uuid, 16);
+	memcpy(sb_disk->label, sb->label, SB_LABEL_SIZE);
+	sb_disk->flags = cpu_to_le64(sb->flags);
+	sb_disk->seq = cpu_to_le64(sb->seq);
+	sb_disk->block_size = cpu_to_le16(sb->block_size);
+	sb_disk->last_mount = cpu_to_le32(sb->last_mount);
+	sb_disk->first_bucket = cpu_to_le16(sb->first_bucket);
+	sb_disk->keys = cpu_to_le16(sb->keys);
+
+	/* For cache and backing devices */
+
+	if (sb->version > BCACHE_SB_MAX_VERSION) {
+		/* Unsupported version */
+		fprintf(stderr, "Unsupported super block version: %lld\n",
+			sb->version);
+	} else if (SB_IS_BDEV(sb)) {
+		/* Backing device */
+		sb_disk->data_offset = cpu_to_le64(sb->data_offset);
+	} else {
+		int i;
+
+		/* Cache device */
+		sb_disk->nbuckets = cpu_to_le64(sb->nbuckets);
+		sb_disk->nr_in_set = cpu_to_le16(sb->nr_in_set);
+		sb_disk->nr_this_dev = cpu_to_le16(sb->nr_this_dev);
+		sb_disk->bucket_size = cpu_to_le32(sb->bucket_size);
+
+		for (i = 0; i < SB_JOURNAL_BUCKETS; i++)
+			sb_disk->d[i] = cpu_to_le64(sb->d[i]);
+	}
+
+	return sb_disk;
 }

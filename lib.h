@@ -50,7 +50,8 @@ int detach_backdev(char *devname);
 int set_backdev_cachemode(char *devname, char *cachemode);
 int set_label(char *devname, char *label);
 int cset_to_devname(struct list_head *head, char *cset, char *devname);
-
+struct cache_sb *to_cache_sb(struct cache_sb *sb, struct cache_sb_disk *sb_disk);
+struct cache_sb_disk *to_cache_sb_disk(struct cache_sb_disk *sb_disk,struct cache_sb *sb);
 
 #define DEVLEN sizeof(struct dev)
 
