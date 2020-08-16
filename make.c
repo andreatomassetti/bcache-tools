@@ -223,35 +223,6 @@ err:
 	return -1;
 }
 
-static void swap_sb(struct cache_sb *sb, int write_cdev_super)
-{
-	int i;
-
-	/* swap to little endian byte order to write */
-	sb->offset		= cpu_to_le64(sb->offset);
-	sb->version		= cpu_to_le64(sb->version);
-	sb->flags		= cpu_to_le64(sb->flags);
-	sb->seq			= cpu_to_le64(sb->seq);
-	sb->last_mount		= cpu_to_le32(sb->last_mount);
-	sb->first_bucket	= cpu_to_le16(sb->first_bucket);
-	sb->keys		= cpu_to_le16(sb->keys);
-	sb->block_size		= cpu_to_le16(sb->block_size);
-
-	for (i = 0; i < SB_JOURNAL_BUCKETS; i++)
-		sb->d[i]	= cpu_to_le64(sb->d[i]);
-
-	if (write_cdev_super) {
-		/* Cache devices */
-		sb->nbuckets	= cpu_to_le64(sb->nbuckets);
-		sb->bucket_size	= cpu_to_le16(sb->bucket_size);
-		sb->nr_in_set	= cpu_to_le16(sb->nr_in_set);
-		sb->nr_this_dev	= cpu_to_le16(sb->nr_this_dev);
-	} else {
-		/* Backing devices */
-		sb->data_offset	= cpu_to_le64(sb->data_offset);
-	}
-}
-
 static void write_sb(char *dev, unsigned int block_size,
 			unsigned int bucket_size,
 			bool writeback, bool discard, bool wipe_bcache,
@@ -261,9 +232,9 @@ static void write_sb(char *dev, unsigned int block_size,
 {
 	int fd;
 	char uuid_str[40], set_uuid_str[40], zeroes[SB_START] = {0};
+	struct cache_sb_disk sb_disk;
 	struct cache_sb sb;
 	blkid_probe pr;
-	int write_cdev_super = 1;
 
 	fd = open(dev, O_RDWR|O_EXCL);
 
@@ -320,13 +291,13 @@ static void write_sb(char *dev, unsigned int block_size,
 	if (force)
 		wipe_bcache = true;
 
-	if (pread(fd, &sb, sizeof(sb), SB_START) != sizeof(sb))
+	if (pread(fd, &sb_disk, sizeof(sb_disk), SB_START) != sizeof(sb_disk))
 		exit(EXIT_FAILURE);
 
-	if (!memcmp(sb.magic, bcache_magic, 16)) {
+	if (!memcmp(sb_disk.magic, bcache_magic, 16)) {
 		if (wipe_bcache) {
-			if (pwrite(fd, zeroes, sizeof(sb),
-				SB_START) != sizeof(sb)) {
+			if (pwrite(fd, zeroes, sizeof(sb_disk),
+				SB_START) != sizeof(sb_disk)) {
 				fprintf(stderr,
 					"Failed to erase super block for %s\n",
 					dev);
@@ -355,6 +326,7 @@ static void write_sb(char *dev, unsigned int block_size,
 		exit(EXIT_FAILURE);
 	}
 
+	memset(&sb_disk, 0, sizeof(struct cache_sb_disk));
 	memset(&sb, 0, sizeof(struct cache_sb));
 
 	sb.offset	= SB_SECTOR;
@@ -373,8 +345,6 @@ static void write_sb(char *dev, unsigned int block_size,
 	uuid_unparse(sb.set_uuid, set_uuid_str);
 
 	if (SB_IS_BDEV(&sb)) {
-		write_cdev_super = 0;
-
 		SET_BDEV_CACHE_MODE(&sb, writeback ?
 			CACHE_MODE_WRITEBACK : CACHE_MODE_WRITETHROUGH);
 
@@ -415,7 +385,7 @@ static void write_sb(char *dev, unsigned int block_size,
 		sb.first_bucket		= (23 / sb.bucket_size) + 1;
 
 		if (sb.nbuckets < 1 << 7) {
-			fprintf(stderr, "Not enough buckets: %ju, need %u\n",
+			fprintf(stderr, "Not enough buckets: %llu, need %u\n",
 			       sb.nbuckets, 1 << 7);
 			exit(EXIT_FAILURE);
 		}
@@ -429,7 +399,7 @@ static void write_sb(char *dev, unsigned int block_size,
 		printf("UUID:			%s\n"
 		       "Set UUID:		%s\n"
 		       "version:		%u\n"
-		       "nbuckets:		%ju\n"
+		       "nbuckets:		%llu\n"
 		       "block_size_in_sectors:	%u\n"
 		       "bucket_size_in_sectors:	%u\n"
 		       "nr_in_set:		%u\n"
@@ -462,17 +432,17 @@ static void write_sb(char *dev, unsigned int block_size,
 	 * Swap native bytes order to little endian for writing
 	 * the super block out.
 	 */
-	swap_sb(&sb, write_cdev_super);
+	to_cache_sb_disk(&sb_disk, &sb);
 
 	/* write csum */
-	sb.csum = csum_set(&sb);
+	sb_disk.csum = cpu_to_le64(csum_set(&sb_disk));
 	/* Zero start of disk */
 	if (pwrite(fd, zeroes, SB_START, 0) != SB_START) {
 		perror("write error\n");
 		exit(EXIT_FAILURE);
 	}
 	/* Write superblock */
-	if (pwrite(fd, &sb, sizeof(sb), SB_START) != sizeof(sb)) {
+	if (pwrite(fd, &sb_disk, sizeof(sb_disk), SB_START) != sizeof(sb_disk)) {
 		perror("write error\n");
 		exit(EXIT_FAILURE);
 	}

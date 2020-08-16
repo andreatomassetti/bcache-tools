@@ -293,7 +293,6 @@ int detail_base(char *devname, struct cache_sb sb, struct dev *base)
 	strcpy(base->name, devname);
 	base->magic = "ok";
 	base->first_sector = SB_SECTOR;
-	base->csum = sb.csum;
 	base->version = sb.version;
 
 	strncpy(base->label, (char *) sb.label, SB_LABEL_SIZE);
@@ -325,6 +324,7 @@ int detail_base(char *devname, struct cache_sb sb, struct dev *base)
 
 int may_add_item(char *devname, struct list_head *head)
 {
+	struct cache_sb_disk sb_disk;
 	struct cache_sb sb;
 
 	if (strcmp(devname, ".") == 0 || strcmp(devname, "..") == 0)
@@ -336,10 +336,13 @@ int may_add_item(char *devname, struct list_head *head)
 
 	if (fd == -1)
 		return 0;
-	if (pread(fd, &sb, sizeof(sb), SB_START) != sizeof(sb)) {
+	if (pread(fd, &sb_disk, sizeof(sb_disk), SB_START) != sizeof(sb_disk)) {
 		close(fd);
 		return 0;
 	}
+
+	to_cache_sb(&sb, &sb_disk);
+
 	if (memcmp(sb.magic, bcache_magic, 16)) {
 		close(fd);
 		return 0;
@@ -348,6 +351,8 @@ int may_add_item(char *devname, struct list_head *head)
 	int ret;
 
 	tmp = (struct dev *) malloc(DEVLEN);
+
+	tmp->csum = le64_to_cpu(sb_disk.csum);
 	ret = detail_base(dev, sb, tmp);
 	if (ret != 0) {
 		fprintf(stderr, "Failed to get information for %s\n", dev);
@@ -399,6 +404,7 @@ int list_bdevs(struct list_head *head)
 
 int detail_dev(char *devname, struct bdev *bd, struct cdev *cd, int *type)
 {
+	struct cache_sb_disk sb_disk;
 	struct cache_sb sb;
 	uint64_t expected_csum;
 	int fd = open(devname, O_RDONLY);
@@ -408,10 +414,12 @@ int detail_dev(char *devname, struct bdev *bd, struct cdev *cd, int *type)
 		return 1;
 	}
 
-	if (pread(fd, &sb, sizeof(sb), SB_START) != sizeof(sb)) {
+	if (pread(fd, &sb_disk, sizeof(sb_disk), SB_START) != sizeof(sb_disk)) {
 		fprintf(stderr, "Couldn't read\n");
 		goto Fail;
 	}
+
+	to_cache_sb(&sb, &sb_disk);
 
 	if (memcmp(sb.magic, bcache_magic, 16)) {
 		fprintf(stderr,
@@ -424,8 +432,8 @@ int detail_dev(char *devname, struct bdev *bd, struct cdev *cd, int *type)
 		goto Fail;
 	}
 
-	expected_csum = csum_set(&sb);
-	if (!(sb.csum == expected_csum)) {
+	expected_csum = csum_set(&sb_disk);
+	if (le64_to_cpu(sb_disk.csum) != expected_csum) {
 		fprintf(stderr, "Csum is not match with expected one\n");
 		goto Fail;
 	}

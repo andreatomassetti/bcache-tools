@@ -29,7 +29,7 @@ int main(int argc, char **argv)
 	bool udev = false;
 	int i, o;
 	extern char *optarg;
-	struct cache_sb sb;
+	struct cache_sb_disk sb_disk;
 	char uuid[40];
 	blkid_probe pr;
 
@@ -66,13 +66,13 @@ int main(int argc, char **argv)
 			continue;
 		}
 
-		if (pread(fd, &sb, sizeof(sb), SB_START) != sizeof(sb))
+		if (pread(fd, &sb_disk, sizeof(sb_disk), SB_START) != sizeof(sb_disk))
 			continue;
 
-		if (memcmp(sb.magic, bcache_magic, 16))
+		if (memcmp(sb_disk.magic, bcache_magic, 16))
 			continue;
 
-		uuid_unparse(sb.uuid, uuid);
+		uuid_unparse(sb_disk.uuid, uuid);
 
 		if (udev)
 			printf("ID_FS_UUID=%s\n"

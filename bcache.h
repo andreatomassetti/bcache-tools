@@ -94,38 +94,41 @@ struct cache_sb_disk {
 	__le64			d[SB_JOURNAL_BUCKETS];	/* journal buckets */
 };
 
+/*
+ * This is for in-memory bcache super block.
+ * NOTE: cache_sb is NOT exactly mapping to cache_sb_disk, the member
+ *       size, ordering and even whole struct size may be different
+ *       from cache_sb_disk.
+ */
 struct cache_sb {
-	uint64_t		csum;
-	uint64_t		offset;	/* sector where this sb was written */
-	uint64_t		version;
+	__u64			offset; /* sector where this sb was written */
+	__u64			version;
 
-	uint8_t			magic[16];
+	__u8			magic[16];
 
-	uint8_t			uuid[16];
+	__u8			uuid[16];
 	union {
-		uint8_t		set_uuid[16];
-		uint64_t	set_magic;
+		__u8		set_uuid[16];
+		__u64		set_magic;
 	};
-	uint8_t			label[SB_LABEL_SIZE];
+	__u8			label[SB_LABEL_SIZE];
 
-	uint64_t		flags;
-	uint64_t		seq;
-	uint64_t		pad[8];
+	__u64			flags;
+	__u64			seq;
 
 	union {
 	struct {
 		/* Cache devices */
-		uint64_t	nbuckets;	/* device size */
+		__u64		nbuckets;	/* device size */
 
-		uint16_t	block_size;	/* sectors */
-		uint16_t	bucket_size;	/* sectors */
-
-		uint16_t	nr_in_set;
-		uint16_t	nr_this_dev;
+		__u16		block_size;	/* sectors */
+		__u16		nr_in_set;
+		__u16		nr_this_dev;
+		__u32		bucket_size;	/* sectors */
 	};
 	struct {
 		/* Backing devices */
-		uint64_t	data_offset;
+		__u64		data_offset;
 
 		/*
 		 * block_size from the cache device section is still used by
@@ -135,14 +138,14 @@ struct cache_sb {
 	};
 	};
 
-	uint32_t		last_mount;	/* time_t */
+	__u32			last_mount;	/* time overflow in y2106 */
 
-	uint16_t		first_bucket;
+	__u16			first_bucket;
 	union {
-		uint16_t	njournal_buckets;
-		uint16_t	keys;
+		__u16		njournal_buckets;
+		__u16		keys;
 	};
-	uint64_t		d[SB_JOURNAL_BUCKETS];	/* journal buckets */
+	__u64			d[SB_JOURNAL_BUCKETS];  /* journal buckets */
 };
 
 static inline bool SB_IS_BDEV(const struct cache_sb *sb)

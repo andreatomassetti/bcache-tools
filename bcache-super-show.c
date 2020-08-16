@@ -25,7 +25,8 @@
 #include <uuid/uuid.h>
 
 #include "bcache.h"
-
+#include "lib.h"
+#include "bitwise.h"
 
 static void usage()
 {
@@ -61,6 +62,7 @@ int main(int argc, char **argv)
 	bool force_csum = false;
 	int o;
 	extern char *optarg;
+	struct cache_sb_disk sb_disk;
 	struct cache_sb sb;
 	char uuid[40];
 	uint64_t expected_csum;
@@ -90,10 +92,12 @@ int main(int argc, char **argv)
 		exit(2);
 	}
 
-	if (pread(fd, &sb, sizeof(sb), SB_START) != sizeof(sb)) {
+	if (pread(fd, &sb_disk, sizeof(sb_disk), SB_START) != sizeof(sb_disk)) {
 		fprintf(stderr, "Couldn't read\n");
 		exit(2);
 	}
+
+	to_cache_sb(&sb, &sb_disk);
 
 	printf("sb.magic\t\t");
 	if (!memcmp(sb.magic, bcache_magic, 16)) {
@@ -104,7 +108,7 @@ int main(int argc, char **argv)
 		exit(2);
 	}
 
-	printf("sb.first_sector\t\t%" PRIu64, sb.offset);
+	printf("sb.first_sector\t\t%llu", sb.offset);
 	if (sb.offset == SB_SECTOR) {
 		printf(" [match]\n");
 	} else {
@@ -113,9 +117,9 @@ int main(int argc, char **argv)
 		exit(2);
 	}
 
-	printf("sb.csum\t\t\t%" PRIX64, sb.csum);
-	expected_csum = csum_set(&sb);
-	if (sb.csum == expected_csum) {
+	printf("sb.csum\t\t\t%llx", le64_to_cpu(sb_disk.csum));
+	expected_csum = csum_set(&sb_disk);
+	if (le64_to_cpu(sb_disk.csum) == expected_csum) {
 		printf(" [match]\n");
 	} else {
 		printf(" [expected %" PRIX64 "]\n", expected_csum);
@@ -125,7 +129,7 @@ int main(int argc, char **argv)
 		}
 	}
 
-	printf("sb.version\t\t%" PRIu64, sb.version);
+	printf("sb.version\t\t%llu", sb.version);
 	switch (sb.version) {
 		// These are handled the same by the kernel
 		case BCACHE_SB_VERSION_CDEV:
@@ -168,8 +172,8 @@ int main(int argc, char **argv)
 	if (!SB_IS_BDEV(&sb)) {
 		// total_sectors includes the superblock;
 		printf("dev.cache.first_sector\t%u\n"
-		       "dev.cache.cache_sectors\t%ju\n"
-		       "dev.cache.total_sectors\t%ju\n"
+		       "dev.cache.cache_sectors\t%llu\n"
+		       "dev.cache.total_sectors\t%llu\n"
 		       "dev.cache.ordered\t%s\n"
 		       "dev.cache.discard\t%s\n"
 		       "dev.cache.pos\t\t%u\n"

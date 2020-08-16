@@ -31,7 +31,7 @@ probe-bcache: CFLAGS += `pkg-config --cflags uuid blkid`
 
 bcache-super-show: LDLIBS += `pkg-config --libs uuid`
 bcache-super-show: CFLAGS += -std=gnu99
-bcache-super-show: crc64.o
+bcache-super-show: crc64.o lib.o
 
 bcache-register: bcache-register.o
 
