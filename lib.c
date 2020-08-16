@@ -730,6 +730,12 @@ struct cache_sb *to_cache_sb(struct cache_sb *sb,
 			sb->d[i]= le64_to_cpu(sb_disk->d[i]);
 	}
 
+	if (sb->version >= BCACHE_SB_VERSION_CDEV_WITH_FEATURES) {
+		sb->feature_compat = le64_to_cpu(sb_disk->feature_compat);
+		sb->feature_incompat = le64_to_cpu(sb_disk->feature_incompat);
+		sb->feature_ro_compat = le64_to_cpu(sb_disk->feature_ro_compat);
+	}
+
 	return sb;
 }
 
@@ -770,6 +776,12 @@ struct cache_sb_disk *to_cache_sb_disk(struct cache_sb_disk *sb_disk,
 
 		for (i = 0; i < SB_JOURNAL_BUCKETS; i++)
 			sb_disk->d[i] = cpu_to_le64(sb->d[i]);
+	}
+
+	if (sb->version >= BCACHE_SB_VERSION_CDEV_WITH_FEATURES) {
+		sb_disk->feature_compat = cpu_to_le64(sb->feature_compat);
+		sb_disk->feature_incompat = cpu_to_le64(sb->feature_incompat);
+		sb_disk->feature_ro_compat = cpu_to_le64(sb->feature_ro_compat);
 	}
 
 	return sb_disk;

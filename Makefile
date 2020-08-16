@@ -38,4 +38,4 @@ bcache-register: bcache-register.o
 bcache: CFLAGS += `pkg-config --cflags blkid uuid smartcols`
 bcache: LDLIBS += `pkg-config --libs blkid uuid smartcols`
 bcache: CFLAGS += -std=gnu99
-bcache: crc64.o lib.o make.o zoned.o
+bcache: crc64.o lib.o make.o zoned.o features.o
