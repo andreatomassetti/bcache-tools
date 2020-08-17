@@ -4,6 +4,7 @@
 #include "list.h"
 
 struct dev {
+	struct cache_sb	sb;
 	char		name[40];
 	char		*magic;
 	uint64_t	first_sector;
@@ -17,6 +18,9 @@ struct dev {
 	char		state[40];
 	char		bname[40];
 	char		attachuuid[40];
+	uint64_t	feature_compat;
+	uint64_t	feature_ro_compat;
+	uint64_t	feature_incompat;
 	struct	list_head	dev_list;
 };
 

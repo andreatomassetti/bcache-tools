@@ -18,6 +18,7 @@
 #include "list.h"
 #include <limits.h>
 
+#include "features.h"
 
 #define BCACHE_TOOLS_VERSION	"1.1"
 
@@ -203,11 +204,13 @@ int show_bdevs_detail(void)
 			// These are handled the same by the kernel
 		case BCACHE_SB_VERSION_CDEV:
 		case BCACHE_SB_VERSION_CDEV_WITH_UUID:
+		case BCACHE_SB_VERSION_CDEV_WITH_FEATURES:
 			printf(" (cache)");
 			break;
 			// The second adds data offset supporet
 		case BCACHE_SB_VERSION_BDEV:
 		case BCACHE_SB_VERSION_BDEV_WITH_OFFSET:
+		case BCACHE_SB_VERSION_BDEV_WITH_FEATURES:
 			printf(" (data)");
 			break;
 		default:
@@ -257,12 +260,14 @@ int show_bdevs(void)
 			// These are handled the same by the kernel
 		case BCACHE_SB_VERSION_CDEV:
 		case BCACHE_SB_VERSION_CDEV_WITH_UUID:
+		case BCACHE_SB_VERSION_CDEV_WITH_FEATURES:
 			printf(" (cache)");
 			break;
 
 			// The second adds data offset supporet
 		case BCACHE_SB_VERSION_BDEV:
 		case BCACHE_SB_VERSION_BDEV_WITH_OFFSET:
+		case BCACHE_SB_VERSION_BDEV_WITH_FEATURES:
 			printf(" (data)");
 			break;
 
@@ -304,7 +309,9 @@ int detail_single(char *devname)
 		fprintf(stderr, "Failed to detail device\n");
 		return ret;
 	}
-	if (type == BCACHE_SB_VERSION_BDEV) {
+	if (type == BCACHE_SB_VERSION_BDEV ||
+	    type == BCACHE_SB_VERSION_BDEV_WITH_OFFSET ||
+	    type == BCACHE_SB_VERSION_BDEV_WITH_FEATURES) {
 		printf("sb.magic\t\t%s\n", bd.base.magic);
 		printf("sb.first_sector\t\t%" PRIu64 "\n",
 		       bd.base.first_sector);
@@ -362,14 +369,16 @@ int detail_single(char *devname)
 
 		putchar('\n');
 		printf("cset.uuid\t\t%s\n", bd.base.cset);
-	} else if (type == BCACHE_SB_VERSION_CDEV
-		   || type == BCACHE_SB_VERSION_CDEV_WITH_UUID) {
+	} else if (type == BCACHE_SB_VERSION_CDEV ||
+		   type == BCACHE_SB_VERSION_CDEV_WITH_UUID ||
+		   type == BCACHE_SB_VERSION_CDEV_WITH_FEATURES) {
 		printf("sb.magic\t\t%s\n", cd.base.magic);
 		printf("sb.first_sector\t\t%" PRIu64 "\n",
 		       cd.base.first_sector);
 		printf("sb.csum\t\t\t%" PRIX64 "\n", cd.base.csum);
 		printf("sb.version\t\t%" PRIu64, cd.base.version);
 		printf(" [cache device]\n");
+		print_cache_set_supported_feature_sets(&cd.base.sb);
 		putchar('\n');
 		printf("dev.label\t\t");
 		if (*cd.base.label)

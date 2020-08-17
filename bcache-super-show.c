@@ -134,12 +134,14 @@ int main(int argc, char **argv)
 		// These are handled the same by the kernel
 		case BCACHE_SB_VERSION_CDEV:
 		case BCACHE_SB_VERSION_CDEV_WITH_UUID:
+		case BCACHE_SB_VERSION_CDEV_WITH_FEATURES:
 			printf(" [cache device]\n");
 			break;
 
 		// The second adds data offset support
 		case BCACHE_SB_VERSION_BDEV:
 		case BCACHE_SB_VERSION_BDEV_WITH_OFFSET:
+		case BCACHE_SB_VERSION_BDEV_WITH_FEATURES:
 			printf(" [backing device]\n");
 			break;
 

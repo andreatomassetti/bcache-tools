@@ -192,11 +192,13 @@ int get_cachedev_state(char *cset_id, char *state)
 
 int get_state(struct dev *dev, char *state)
 {
-	if (dev->version == BCACHE_SB_VERSION_CDEV
-	    || dev->version == BCACHE_SB_VERSION_CDEV_WITH_UUID)
+	if (dev->version == BCACHE_SB_VERSION_CDEV ||
+	    dev->version == BCACHE_SB_VERSION_CDEV_WITH_UUID ||
+	    dev->version == BCACHE_SB_VERSION_CDEV_WITH_FEATURES)
 		return get_cachedev_state(dev->cset, state);
-	else if (dev->version == BCACHE_SB_VERSION_BDEV
-		   || dev->version == BCACHE_SB_VERSION_BDEV_WITH_OFFSET)
+	else if (dev->version == BCACHE_SB_VERSION_BDEV ||
+		 dev->version == BCACHE_SB_VERSION_BDEV_WITH_OFFSET ||
+		 dev->version == BCACHE_SB_VERSION_BDEV_WITH_FEATURES)
 		return get_backdev_state(dev->name, state);
 	else
 		return 1;
@@ -291,6 +293,7 @@ int detail_base(char *devname, struct cache_sb sb, struct dev *base)
 {
 	int ret;
 
+	base->sb = sb;
 	strcpy(base->name, devname);
 	base->magic = "ok";
 	base->first_sector = SB_SECTOR;
@@ -440,13 +443,16 @@ int detail_dev(char *devname, struct bdev *bd, struct cdev *cd, int *type)
 	}
 
 	*type = sb.version;
-	if (sb.version == BCACHE_SB_VERSION_BDEV) {
+	if (sb.version == BCACHE_SB_VERSION_BDEV ||
+	    sb.version == BCACHE_SB_VERSION_BDEV_WITH_OFFSET ||
+	    sb.version == BCACHE_SB_VERSION_BDEV_WITH_FEATURES) {
 		detail_base(devname, sb, &bd->base);
 		bd->first_sector = BDEV_DATA_START_DEFAULT;
 		bd->cache_mode = BDEV_CACHE_MODE(&sb);
 		bd->cache_state = BDEV_STATE(&sb);
-	} else if (sb.version == BCACHE_SB_VERSION_CDEV
-		   || sb.version == BCACHE_SB_VERSION_CDEV_WITH_UUID) {
+	} else if (sb.version == BCACHE_SB_VERSION_CDEV ||
+		   sb.version == BCACHE_SB_VERSION_CDEV_WITH_UUID ||
+		   sb.version == BCACHE_SB_VERSION_CDEV_WITH_FEATURES) {
 		detail_base(devname, sb, &cd->base);
 		cd->first_sector = sb.bucket_size * sb.first_bucket;
 		cd->cache_sectors =
