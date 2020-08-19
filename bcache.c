@@ -10,13 +10,13 @@
 #include <unistd.h>
 #include <getopt.h>
 #include <regex.h>
-#include <libsmartcols/libsmartcols.h>
 #include "bcache.h"
 #include "lib.h"
 #include "make.h"
 #include <locale.h>
 #include "list.h"
 #include <limits.h>
+#include <assert.h>
 
 #include "features.h"
 
@@ -425,8 +425,34 @@ int detail_single(char *devname)
 	return 0;
 }
 
+void replace_line(char **dest, const char *from, const char *to)
+{
+	assert(strlen(from) == strlen(to));
+	char sub[4096] = "";
+	char new[4096] = "";
+
+	strcpy(sub, *dest);
+	while (1) {
+		char *tmp = strpbrk(sub, from);
+
+		if (tmp != NULL) {
+			strcpy(new, tmp);
+			strcpy(sub, tmp + strlen(from));
+		} else
+			break;
+	}
+	if (strlen(new) > 0) {
+		strncpy(new, to, strlen(to));
+		sprintf(*dest + strlen(*dest) - strlen(new), new, strlen(new));
+	}
+}
+
 int tree(void)
 {
+	char *out = (char *)malloc(4096);
+	const char *begin = ".\n";
+	const char *middle = "├─";
+	const char *tail = "└─";
 	struct list_head head;
 	struct dev *devs, *tmp, *n, *m;
 
@@ -438,35 +464,26 @@ int tree(void)
 		fprintf(stderr, "Failed to list devices\n");
 		return ret;
 	}
-	struct libscols_table *tb;
-	struct libscols_line *dad, *son;
-	enum { COL_CSET, COL_BNAME };
-	setlocale(LC_ALL, "");
-	tb = scols_new_table();
-	scols_table_new_column(tb, ".", 0.1, SCOLS_FL_TREE);
-	scols_table_new_column(tb, "", 2, SCOLS_FL_TRUNC);
+	sprintf(out, "%s", begin);
 	list_for_each_entry_safe(devs, n, &head, dev_list) {
 		if ((devs->version == BCACHE_SB_VERSION_CDEV
 		     || devs->version == BCACHE_SB_VERSION_CDEV_WITH_UUID)
 		    && strcmp(devs->state, BCACHE_BASIC_STATE_ACTIVE) == 0) {
-			dad = scols_table_new_line(tb, NULL);
-			scols_line_set_data(dad, COL_CSET, devs->name);
+			sprintf(out + strlen(out), "%s\n", devs->name);
 			list_for_each_entry_safe(tmp, m, &head, dev_list) {
 				if (strcmp(devs->cset, tmp->attachuuid) ==
 				    0) {
-					son =
-					    scols_table_new_line(tb, dad);
-					scols_line_set_data(son, COL_CSET,
-							    tmp->name);
-					scols_line_set_data(son, COL_BNAME,
-							    tmp->bname);
+					replace_line(&out, tail, middle);
+					sprintf(out + strlen(out), "%s%s %s\n",
+						tail, tmp->name, tmp->bname);
 				}
 			}
 		}
 	}
-	scols_print_table(tb);
-	scols_unref_table(tb);
+	if (strlen(out) > strlen(begin))
+		printf("%s", out);
 	free_dev(&head);
+	free(out);
 	return 0;
 }
 

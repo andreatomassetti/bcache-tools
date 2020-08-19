@@ -22,8 +22,8 @@ clean:
 
 bcache-test: LDLIBS += `pkg-config --libs openssl` -lm
 
-make-bcache: LDLIBS += `pkg-config --libs uuid blkid smartcols`
-make-bcache: CFLAGS += `pkg-config --cflags uuid blkid smartcols`
+make-bcache: LDLIBS += `pkg-config --libs uuid blkid`
+make-bcache: CFLAGS += `pkg-config --cflags uuid blkid`
 make-bcache: make.o crc64.o lib.o zoned.o
 
 probe-bcache: LDLIBS += `pkg-config --libs uuid blkid`
@@ -35,7 +35,7 @@ bcache-super-show: crc64.o lib.o
 
 bcache-register: bcache-register.o
 
-bcache: CFLAGS += `pkg-config --cflags blkid uuid smartcols`
-bcache: LDLIBS += `pkg-config --libs blkid uuid smartcols`
+bcache: CFLAGS += `pkg-config --cflags blkid uuid`
+bcache: LDLIBS += `pkg-config --libs blkid uuid`
 bcache: CFLAGS += -std=gnu99
 bcache: crc64.o lib.o make.o zoned.o features.o
