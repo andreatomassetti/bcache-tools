@@ -175,9 +175,9 @@ int version_usagee(void)
 
 void free_dev(struct list_head *head)
 {
-	struct dev *dev;
+	struct dev *dev, *n;
 
-	list_for_each_entry(dev, head, dev_list) {
+	list_for_each_entry_safe(dev, n, head, dev_list) {
 		free(dev);
 	}
 }
@@ -185,7 +185,7 @@ void free_dev(struct list_head *head)
 int show_bdevs_detail(void)
 {
 	struct list_head head;
-	struct dev *devs;
+	struct dev *devs, *n;
 
 	INIT_LIST_HEAD(&head);
 	int ret;
@@ -197,7 +197,7 @@ int show_bdevs_detail(void)
 	}
 	printf("Name\t\tUuid\t\t\t\t\tCset_Uuid\t\t\t\tType\t\tState");
 	printf("\t\t\tBname\t\tAttachToDev\tAttachToCset\n");
-	list_for_each_entry(devs, &head, dev_list) {
+	list_for_each_entry_safe(devs, n, &head, dev_list) {
 		printf("%s\t%s\t%s\t%lu", devs->name, devs->uuid,
 		       devs->cset, devs->version);
 		switch (devs->version) {
@@ -242,7 +242,7 @@ int show_bdevs_detail(void)
 int show_bdevs(void)
 {
 	struct list_head head;
-	struct dev *devs;
+	struct dev *devs, *n;
 
 	INIT_LIST_HEAD(&head);
 	int ret;
@@ -254,7 +254,7 @@ int show_bdevs(void)
 	}
 
 	printf("Name\t\tType\t\tState\t\t\tBname\t\tAttachToDev\n");
-	list_for_each_entry(devs, &head, dev_list) {
+	list_for_each_entry_safe(devs, n, &head, dev_list) {
 		printf("%s\t%lu", devs->name, devs->version);
 		switch (devs->version) {
 			// These are handled the same by the kernel
@@ -428,7 +428,7 @@ int detail_single(char *devname)
 int tree(void)
 {
 	struct list_head head;
-	struct dev *devs, *tmp;
+	struct dev *devs, *tmp, *n, *m;
 
 	INIT_LIST_HEAD(&head);
 	int ret;
@@ -445,13 +445,13 @@ int tree(void)
 	tb = scols_new_table();
 	scols_table_new_column(tb, ".", 0.1, SCOLS_FL_TREE);
 	scols_table_new_column(tb, "", 2, SCOLS_FL_TRUNC);
-	list_for_each_entry(devs, &head, dev_list) {
+	list_for_each_entry_safe(devs, n, &head, dev_list) {
 		if ((devs->version == BCACHE_SB_VERSION_CDEV
 		     || devs->version == BCACHE_SB_VERSION_CDEV_WITH_UUID)
 		    && strcmp(devs->state, BCACHE_BASIC_STATE_ACTIVE) == 0) {
 			dad = scols_table_new_line(tb, NULL);
 			scols_line_set_data(dad, COL_CSET, devs->name);
-			list_for_each_entry(tmp, &head, dev_list) {
+			list_for_each_entry_safe(tmp, m, &head, dev_list) {
 				if (strcmp(devs->cset, tmp->attachuuid) ==
 				    0) {
 					son =
