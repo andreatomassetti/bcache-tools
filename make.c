@@ -604,6 +604,11 @@ int make_bcache(int argc, char **argv)
 		usage();
 	}
 
+	if (ncache_devices > 1) {
+		fprintf(stderr, "Please specify only one cache device\n");
+		usage();
+	}
+
 	if (bucket_size < block_size) {
 		fprintf(stderr,
 			"Bucket size cannot be smaller than block size\n");
