@@ -201,8 +201,8 @@ uint64_t crc64(const void *data, size_t len);
 #define BCH_FEATURE_TYPE_MASK	0x03
 
 #define BCH_FEATURE_COMPAT_SUPP		0
-#define BCH_FEATURE_INCOMPAT_SUPP	0
 #define BCH_FEATURE_RO_COMPAT_SUPP	0
+#define BCH_FEATURE_INCOMPAT_SUPP	BCH_FEATURE_INCOMPAT_LARGE_BUCKET
 
 #define BCH_HAS_COMPAT_FEATURE(sb, mask) \
 		((sb)->feature_compat & (mask))
