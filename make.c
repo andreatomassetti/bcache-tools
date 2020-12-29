@@ -340,7 +340,6 @@ static void write_sb(char *dev, unsigned int block_size,
 	uuid_generate(sb.uuid);
 	memcpy(sb.set_uuid, set_uuid, sizeof(sb.set_uuid));
 
-	set_bucket_size(&sb, bucket_size);
 	sb.block_size	= block_size;
 
 	uuid_unparse(sb.uuid, uuid_str);
@@ -383,6 +382,8 @@ static void write_sb(char *dev, unsigned int block_size,
 		       data_offset);
 		putchar('\n');
 	} else {
+		set_bucket_size(&sb, bucket_size);
+
 		sb.nbuckets		= getblocks(fd) / sb.bucket_size;
 		sb.nr_in_set		= 1;
 		/* 23 is (SB_SECTOR + SB_SIZE) - 1 sectors */
