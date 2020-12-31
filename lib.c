@@ -21,6 +21,19 @@
  * utils function
  */
 
+static unsigned int log2_u32(uint32_t n)
+{
+	int r = 0;
+
+	n = n >> 1;
+	while (n) {
+		n = n >> 1;
+		r++;
+	}
+
+	return r;
+}
+
 static void trim_prefix(char *dest, char *src, int num)
 {
 	strcpy(dest, src + num);
@@ -772,7 +785,7 @@ struct cache_sb *to_cache_sb(struct cache_sb *sb,
 
 	if (sb->version >= BCACHE_SB_VERSION_CDEV_WITH_FEATURES &&
 	    bch_has_feature_large_bucket(sb))
-		sb->bucket_size += le16_to_cpu(sb_disk->bucket_size_hi) << 16;
+		sb->bucket_size = 1 << le16_to_cpu(sb_disk->bucket_size);
 
 	return sb;
 }
@@ -824,7 +837,7 @@ struct cache_sb_disk *to_cache_sb_disk(struct cache_sb_disk *sb_disk,
 
 	if (sb->version >= BCACHE_SB_VERSION_CDEV_WITH_FEATURES &&
 	    bch_has_feature_large_bucket(sb))
-		sb_disk->bucket_size_hi = cpu_to_le16(sb->bucket_size >> 16);
+		sb_disk->bucket_size = cpu_to_le16(log2_u32(sb->bucket_size));
 
 	return sb_disk;
 }

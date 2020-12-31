@@ -13,7 +13,7 @@ struct dev {
 	char		label[SB_LABEL_SIZE + 1];
 	char		uuid[40];
 	uint16_t	sectors_per_block;
-	uint16_t	sectors_per_bucket;
+	uint32_t	sectors_per_bucket;
 	char		cset[40];
 	char		state[40];
 	char		bname[40];

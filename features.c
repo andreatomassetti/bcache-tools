@@ -20,7 +20,9 @@ struct feature {
 };
 
 static struct feature feature_list[] = {
-	{BCH_FEATURE_INCOMPAT, BCH_FEATURE_INCOMPAT_LARGE_BUCKET,
+	{BCH_FEATURE_INCOMPAT, BCH_FEATURE_INCOMPAT_OBSO_LARGE_BUCKET,
+		"obso_large_bucket"},
+	{BCH_FEATURE_INCOMPAT, BCH_FEATURE_INCOMPAT_LOG_LARGE_BUCKET_SIZE,
 		"large_bucket"},
 	{0, 0, 0 },
 };
