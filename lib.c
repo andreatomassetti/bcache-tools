@@ -442,6 +442,33 @@ int detail_dev(char *devname, struct bdev *bd, struct cdev *cd, int *type)
 		goto Fail;
 	}
 
+	/* Check for incompat feature set */
+	if (sb.version >= BCACHE_SB_VERSION_BDEV_WITH_FEATURES ||
+	    sb.version >= BCACHE_SB_VERSION_CDEV_WITH_FEATURES) {
+		uint64_t features;
+
+		features = sb.feature_compat & ~BCH_FEATURE_COMPAT_SUPP;
+		if (features) {
+			fprintf(stderr,
+				"Unsupported compatible feature found\n");
+			goto Fail;
+		}
+
+		features = sb.feature_ro_compat & ~BCH_FEATURE_RO_COMPAT_SUPP;
+		if (features) {
+			fprintf(stderr,
+				"Unsupported read-only compatible feature found\n");
+			goto Fail;
+		}
+
+		features = sb.feature_incompat & ~BCH_FEATURE_INCOMPAT_SUPP;
+		if (features) {
+			fprintf(stderr,
+				"Unsupported incompatible feature found\n");
+			goto Fail;
+		}
+	}
+
 	*type = sb.version;
 	if (sb.version == BCACHE_SB_VERSION_BDEV ||
 	    sb.version == BCACHE_SB_VERSION_BDEV_WITH_OFFSET ||
