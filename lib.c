@@ -783,9 +783,13 @@ struct cache_sb *to_cache_sb(struct cache_sb *sb,
 		sb->feature_ro_compat = le64_to_cpu(sb_disk->feature_ro_compat);
 	}
 
-	if (sb->version >= BCACHE_SB_VERSION_CDEV_WITH_FEATURES &&
-	    bch_has_feature_large_bucket(sb))
-		sb->bucket_size = 1 << le16_to_cpu(sb_disk->bucket_size);
+	if (sb->version >= BCACHE_SB_VERSION_CDEV_WITH_FEATURES) {
+		if (bch_has_feature_large_bucket(sb))
+			sb->bucket_size = 1 << le16_to_cpu(sb_disk->bucket_size);
+		else if (bch_has_feature_obso_large_bucket(sb))
+			sb->bucket_size +=
+				le16_to_cpu(sb_disk->obso_bucket_size_hi) << 16;
+	}
 
 	return sb;
 }
