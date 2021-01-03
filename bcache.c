@@ -195,7 +195,7 @@ int show_bdevs_detail(void)
 		fprintf(stderr, "Failed to list devices\n");
 		return ret;
 	}
-	printf("Name\t\tUuid\t\t\t\t\tCset_Uuid\t\t\t\tType\t\tState");
+	printf("Name\t\tUuid\t\t\t\t\tCset_Uuid\t\t\t\tType\t\t\tState");
 	printf("\t\t\tBname\t\tAttachToDev\tAttachToCset\n");
 	list_for_each_entry_safe(devs, n, &head, dev_list) {
 		printf("%s\t%s\t%s\t%lu", devs->name, devs->uuid,
@@ -217,7 +217,7 @@ int show_bdevs_detail(void)
 			printf(" (unknown)");
 			break;
 		}
-		printf("\t%-16s", devs->state);
+		printf("\t\t%-16s", devs->state);
 		printf("\t%-16s", devs->bname);
 		char attachdev[30];
 
