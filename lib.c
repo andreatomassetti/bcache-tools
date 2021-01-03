@@ -487,6 +487,7 @@ int detail_dev(char *devname, struct bdev *bd, struct cdev *cd, int *type)
 	    sb.version == BCACHE_SB_VERSION_BDEV_WITH_OFFSET ||
 	    sb.version == BCACHE_SB_VERSION_BDEV_WITH_FEATURES) {
 		detail_base(devname, sb, &bd->base);
+		bd->base.csum = expected_csum;
 		bd->first_sector = BDEV_DATA_START_DEFAULT;
 		bd->cache_mode = BDEV_CACHE_MODE(&sb);
 		bd->cache_state = BDEV_STATE(&sb);
@@ -494,6 +495,7 @@ int detail_dev(char *devname, struct bdev *bd, struct cdev *cd, int *type)
 		   sb.version == BCACHE_SB_VERSION_CDEV_WITH_UUID ||
 		   sb.version == BCACHE_SB_VERSION_CDEV_WITH_FEATURES) {
 		detail_base(devname, sb, &cd->base);
+		cd->base.csum = expected_csum;
 		cd->first_sector = sb.bucket_size * sb.first_bucket;
 		cd->cache_sectors =
 		    sb.bucket_size * (sb.nbuckets - sb.first_bucket);
