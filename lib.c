@@ -343,32 +343,31 @@ int may_add_item(char *devname, struct list_head *head)
 {
 	struct cache_sb_disk sb_disk;
 	struct cache_sb sb;
+	char dev[512];
+	struct dev *tmp;
+	int ret;
 
 	if (strcmp(devname, ".") == 0 || strcmp(devname, "..") == 0)
 		return 0;
-	char dev[261];
 
 	sprintf(dev, "/dev/%s", devname);
 	int fd = open(dev, O_RDONLY);
-
 	if (fd == -1)
 		return 0;
+
 	if (pread(fd, &sb_disk, sizeof(sb_disk), SB_START) != sizeof(sb_disk)) {
+		close(fd);
+		return 0;
+	}
+
+	if (memcmp(sb_disk.magic, bcache_magic, 16)) {
 		close(fd);
 		return 0;
 	}
 
 	to_cache_sb(&sb, &sb_disk);
 
-	if (memcmp(sb.magic, bcache_magic, 16)) {
-		close(fd);
-		return 0;
-	}
-	struct dev *tmp;
-	int ret;
-
 	tmp = (struct dev *) malloc(DEVLEN);
-
 	tmp->csum = le64_to_cpu(sb_disk.csum);
 	ret = detail_base(dev, sb, tmp);
 	if (ret != 0) {
