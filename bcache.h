@@ -228,6 +228,8 @@ static inline int bch_has_feature_##name(struct cache_sb *sb) \
 } \
 static inline void bch_set_feature_##name(struct cache_sb *sb) \
 { \
+	if ((sb)->version < BCACHE_SB_VERSION_CDEV_WITH_FEATURES) \
+		(sb)->version = BCACHE_SB_VERSION_CDEV_WITH_FEATURES; \
 	(sb)->feature_compat |= \
 		BCH##_FEATURE_COMPAT_##flagname; \
 } \
@@ -245,6 +247,8 @@ static inline int bch_has_feature_##name(struct cache_sb *sb) \
 } \
 static inline void bch_set_feature_##name(struct cache_sb *sb) \
 { \
+	if ((sb)->version < BCACHE_SB_VERSION_CDEV_WITH_FEATURES) \
+		(sb)->version = BCACHE_SB_VERSION_CDEV_WITH_FEATURES; \
 	(sb)->feature_ro_compat |= \
 		BCH##_FEATURE_RO_COMPAT_##flagname; \
 } \
@@ -262,6 +266,8 @@ static inline int bch_has_feature_##name(struct cache_sb *sb) \
 } \
 static inline void bch_set_feature_##name(struct cache_sb *sb) \
 { \
+	if ((sb)->version < BCACHE_SB_VERSION_CDEV_WITH_FEATURES) \
+		(sb)->version = BCACHE_SB_VERSION_CDEV_WITH_FEATURES; \
 	(sb)->feature_incompat |= \
 		BCH##_FEATURE_INCOMPAT_##flagname; \
 } \
