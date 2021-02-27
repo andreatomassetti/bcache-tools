@@ -378,7 +378,7 @@ int may_add_item(char *devname, struct list_head *head)
 	struct cache_sb sb;
 	char dev[512];
 	struct dev *tmp;
-	int ret;
+	int ret = 0;
 
 	if (strcmp(devname, ".") == 0 || strcmp(devname, "..") == 0)
 		return 0;
@@ -388,27 +388,33 @@ int may_add_item(char *devname, struct list_head *head)
 	if (fd == -1)
 		return 0;
 
-	if (pread(fd, &sb_disk, sizeof(sb_disk), SB_START) != sizeof(sb_disk)) {
-		close(fd);
-		return 0;
-	}
+	if (pread(fd, &sb_disk, sizeof(sb_disk), SB_START) != sizeof(sb_disk))
+		goto out;
 
-	if (memcmp(sb_disk.magic, bcache_magic, 16)) {
-		close(fd);
-		return 0;
-	}
+	if (memcmp(sb_disk.magic, bcache_magic, 16))
+		goto out;
 
 	to_cache_sb(&sb, &sb_disk);
 
 	tmp = (struct dev *) malloc(DEVLEN);
+	if (tmp == NULL) {
+		fprintf(stderr, "Error: fail to allocate memory buffer\n");
+		ret = 1;
+		goto out;
+	}
+
 	tmp->csum = le64_to_cpu(sb_disk.csum);
 	ret = detail_base(dev, sb, tmp);
 	if (ret != 0) {
 		fprintf(stderr, "Failed to get information for %s\n", dev);
-		return 1;
+		free(tmp);
+		goto out;
 	}
 	list_add_tail(&tmp->dev_list, head);
-	return 0;
+
+out:
+	close(fd);
+	return ret;
 }
 
 int list_bdevs(struct list_head *head)
