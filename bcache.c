@@ -173,7 +173,7 @@ void replace_line(char **dest, const char *from, const char *to)
 
 int tree(void)
 {
-	char *out = (char *)malloc(4096);
+	char *out;
 	const char *begin = ".\n";
 	const char *middle = "├─";
 	const char *tail = "└─";
@@ -183,8 +183,15 @@ int tree(void)
 	INIT_LIST_HEAD(&head);
 	int ret;
 
+	out = (char *)malloc(4096);
+	if (out == NULL) {
+		fprintf(stderr, "Error: fail to allocate memory buffer\n");
+		return 1;
+	}
+
 	ret = list_bdevs(&head);
 	if (ret != 0) {
+		free(out);
 		fprintf(stderr, "Failed to list devices\n");
 		return ret;
 	}
