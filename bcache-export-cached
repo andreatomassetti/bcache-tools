@@ -19,7 +19,7 @@ for slave in "/sys/class/block/$DEVNAME/slaves"/*; do
             $1 == "dev.uuid" { uuid=$2; }
             $1 == "dev.label" && $2 != "(empty)" { label=$2; }
             END {
-                if (sbver == 1 && uuid) {
+                if ((sbver == 1 || sbver == 4 || sbver == 6) && uuid) {
                     print("CACHED_UUID=" uuid)
                     if (label) print("CACHED_LABEL=" label)
                     exit(0)
