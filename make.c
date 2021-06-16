@@ -437,7 +437,8 @@ static void write_sb(char *dev, struct sb_context *sbc, bool bdev, bool force)
 
 		/* Attempting to discard cache device
 		 */
-		blkdiscard_all(dev, fd);
+		if (discard)
+			blkdiscard_all(dev, fd);
 		putchar('\n');
 	}
 
