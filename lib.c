@@ -84,6 +84,39 @@ bool prefix_with(char *dst, char *prefix)
 	return true;
 }
 
+void free_dev(struct list_head *head)
+{
+	struct dev *dev, *n;
+
+	list_for_each_entry_safe(dev, n, head, dev_list) {
+		free(dev);
+	}
+}
+
+bool accepted_char(char c)
+{
+	if ('0' <= c && c <= '9')
+		return true;
+	if ('A' <= c && c <= 'Z')
+		return true;
+	if ('a' <= c && c <= 'z')
+		return true;
+	if (strchr(".-_", c))
+		return true;
+	return false;
+}
+
+void print_encode(char *in)
+{
+	char *pos;
+
+	for (pos = in; *pos; pos++)
+		if (accepted_char(*pos))
+			putchar(*pos);
+		else
+			printf("%%%x", *pos);
+}
+
 bool part_of_disk(char *devname, char *partname)
 {
 	char pattern[40];
@@ -418,28 +451,17 @@ int list_bdevs(struct list_head *head)
 	return 0;
 }
 
-int detail_dev(char *devname, struct bdev *bd, struct cdev *cd, int *type)
+int __detail_dev(char *devname, struct cache_sb_disk *sb_disk,
+		 struct bdev *bd, struct cdev *cd, int *type)
 {
-	struct cache_sb_disk sb_disk;
 	struct cache_sb sb;
 	uint64_t expected_csum;
-	int fd = open(devname, O_RDONLY);
 
-	if (fd < 0) {
-		fprintf(stderr, "Error: Can't open dev  %s\n", devname);
-		return 1;
-	}
-
-	if (pread(fd, &sb_disk, sizeof(sb_disk), SB_START) != sizeof(sb_disk)) {
-		fprintf(stderr, "Couldn't read\n");
-		goto Fail;
-	}
-
-	to_cache_sb(&sb, &sb_disk);
+	to_cache_sb(&sb, sb_disk);
 
 	if (memcmp(sb.magic, bcache_magic, 16)) {
 		fprintf(stderr,
-			"Bad magic,make sure this is an bcache device\n");
+			"Bad magic, make sure this is an bcache device\n");
 		goto Fail;
 	}
 
@@ -448,8 +470,8 @@ int detail_dev(char *devname, struct bdev *bd, struct cdev *cd, int *type)
 		goto Fail;
 	}
 
-	expected_csum = csum_set(&sb_disk);
-	if (le64_to_cpu(sb_disk.csum) != expected_csum) {
+	expected_csum = csum_set(sb_disk);
+	if (le64_to_cpu(sb_disk->csum) != expected_csum) {
 		fprintf(stderr, "Csum is not match with expected one\n");
 		goto Fail;
 	}
@@ -509,8 +531,47 @@ int detail_dev(char *devname, struct bdev *bd, struct cdev *cd, int *type)
 	}
 	return 0;
 Fail:
-	close(fd);
 	return 1;
+}
+
+int detail_dev(char *devname, struct bdev *bd, struct cdev *cd, int *type)
+{
+	char *buf = NULL;
+	struct cache_sb_disk *sb_disk = NULL;
+	int buf_size = 16<<10, ret = 1;
+	int fd;
+
+	buf = malloc(buf_size);
+	if (buf == NULL) {
+		fprintf(stderr, "Error: fail to allocate read buffer\n");
+		goto out;
+	}
+
+	fd = open(devname, O_RDONLY);
+	if (fd < 0) {
+		fprintf(stderr, "Error: Can't open dev  %s\n", devname);
+		goto out;
+	}
+
+	memset(buf, 0, buf_size);
+	if (pread(fd, buf, buf_size, 0) != buf_size) {
+		fprintf(stderr, "Couldn't read\n");
+		goto out_memory;
+	}
+
+	/* Try whether it is bcache super block */
+	sb_disk = (struct cache_sb_disk *)(buf + SB_START);
+	if (!memcmp(sb_disk->magic, bcache_magic, 16)) {
+		ret = __detail_dev(devname, sb_disk, bd, cd, type);
+		goto out_memory;
+	}
+
+	fprintf(stderr, "Error: Bad magic, not bcache device\n");
+
+out_memory:
+	free(buf);
+out:
+	return ret;
 }
 
 int register_dev(char *devname)

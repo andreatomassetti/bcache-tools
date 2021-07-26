@@ -57,6 +57,9 @@ int cset_to_devname(struct list_head *head, char *cset, char *devname);
 struct cache_sb *to_cache_sb(struct cache_sb *sb, struct cache_sb_disk *sb_disk);
 struct cache_sb_disk *to_cache_sb_disk(struct cache_sb_disk *sb_disk,struct cache_sb *sb);
 void set_bucket_size(struct cache_sb *sb, unsigned int bucket_size);
+void free_dev(struct list_head *head);
+void print_encode(char *in);
+bool accepted_char(char c);
 
 #define DEVLEN sizeof(struct dev)
 

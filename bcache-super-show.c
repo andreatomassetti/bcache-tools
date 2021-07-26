@@ -33,30 +33,6 @@ static void usage()
 	fprintf(stderr, "Usage: bcache-super-show [-f] <device>\n");
 }
 
-
-static bool accepted_char(char c)
-{
-	if ('0' <= c && c <= '9')
-		return true;
-	if ('A' <= c && c <= 'Z')
-		return true;
-	if ('a' <= c && c <= 'z')
-		return true;
-	if (strchr(".-_", c))
-		return true;
-	return false;
-}
-
-static void print_encode(char* in)
-{
-	for (char* pos = in; *pos; pos++)
-		if (accepted_char(*pos))
-			putchar(*pos);
-		else
-			printf("%%%x", *pos);
-}
-
-
 int main(int argc, char **argv)
 {
 	bool force_csum = false;

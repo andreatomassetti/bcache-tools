@@ -39,4 +39,4 @@ bcache-register: bcache-register.o
 bcache: CFLAGS += `pkg-config --cflags blkid uuid`
 bcache: LDLIBS += `pkg-config --libs blkid uuid`
 bcache: CFLAGS += -std=gnu99
-bcache: crc64.o lib.o make.o zoned.o features.o
+bcache: crc64.o lib.o make.o zoned.o features.o show.o
