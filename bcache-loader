@@ -1,0 +1,107 @@
+#!/usr/bin/env python3
+
+from logging import exception
+import subprocess
+import sys
+import os
+import syslog as sl
+from time import sleep
+
+import yaml
+
+
+def device_exists(d):
+    return os.path.exists(d)
+
+
+def device_already_registered(d):
+    device_basename = os.path.basename(d)
+    return os.path.exists(f"/sys/block/{device_basename}/bcache/")
+
+
+def get_cache_uuid(c):
+    cache_basename = os.path.basename(c)
+    return os.path.basename(os.readlink(f'/sys/block/{cache_basename}/bcache/set'))
+
+
+def register_device(d, dtype):
+    if device_exists(d):
+        if not device_already_registered(d):
+            device_type_opt = '-C' if dtype == 'cache' else '-B'
+            return subprocess.call(['/usr/sbin/make-bcache', '--ioctl', device_type_opt, d])
+    else:
+        sl.syslog(sl.LOG_WARNING, f'Device does not exist: {d}')
+
+    return 0
+
+
+def attach_backing_to_cache(bd, cset):
+    backing_basename = os.path.basename(bd)
+    try:
+        with open(f'/sys/block/{backing_basename}/bcache/attach', 'w') as f:
+            f.write(cset)
+        return 0
+    except Exception as e:
+        sl.syslog(sl.LOG_ERR, f'Unable to attach {bd} to {cset}. Reason: {str(e)}')
+        return 1
+
+
+def attach_backing_and_cache(bds, cd):
+
+    cache_set_uuid = None
+
+    if register_device(cd, "cache"):
+        sl.syslog(sl.LOG_ERR, f'Error while registering cache device {cd}')
+        return 1
+
+    sl.syslog(sl.LOG_INFO, f'Successfully registered cache device {cd}')
+    sleep(1)  # Wait for the cache device to fully register
+    cache_set_uuid = get_cache_uuid(cd)
+
+    for b in bds:
+        if register_device(b, "backing"):
+            sl.syslog(sl.LOG_ERR, f'Error while registering backing device {b} ...')
+            return 1
+
+        sl.syslog(sl.LOG_INFO, f'Successfully registered backing device {b}')
+        sleep(1)  # Wait for the backing device to fully register
+        if cache_set_uuid:
+            sl.syslog(sl.LOG_INFO, f'Attaching backing device {b} to cache device {cd} with UUID {cache_set_uuid}')
+            attach_backing_to_cache(b, cache_set_uuid)
+
+    return 0
+
+
+try:
+    subprocess.call(['/sbin/modprobe', 'bcache'])
+except Exception as e:
+    sl.syslog(sl.LOG_ERR, f'Unable to probe custom_bcache module. Reason: {str(e)}')
+    exit(1)
+
+try:
+    with open('/etc/bcache/bcache.conf') as f:
+        config = yaml.load(f, Loader=yaml.FullLoader)
+except Exception as e:
+    sl.syslog(sl.LOG_ERR, f'Unable to load bcache config. Reason: {str(e)}')
+    exit(1)
+
+try:
+
+    for cache in config['cache_devices']:
+        cache_device = os.path.realpath(cache['device'])
+
+        # Check if it's a cache device
+        if sys.argv[1] == cache_device:
+            sl.syslog(sl.LOG_INFO, f'Managing cache device: {str(sys.argv[1])}')
+            backing_devices = (b['device'] for b in cache['backing_devices'])
+            attach_backing_and_cache(backing_devices, cache_device)
+        else:
+            # Check if it's a backing device of this cache device
+            for backing in cache['backing_devices']:
+                backing_device = os.path.realpath(backing['device'])
+                if sys.argv[1] == backing_device:
+                    sl.syslog(sl.LOG_INFO, f'Managing backing device: {str(sys.argv[1])}')
+                    attach_backing_and_cache([backing_device], cache_device)
+except Exception as e:
+    sl.syslog(sl.LOG_ERR, f'Reason: {str(e)}')
+    exit(1)

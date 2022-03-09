@@ -1,0 +1,7 @@
+# /lib/udev/rules.d/60-bcache.rules
+ACTION=="remove", GOTO="bcache_end"
+SUBSYSTEM!="block", GOTO="bcache_end"
+
+RUN+="/lib/udev/bcache-loader /dev/$name"
+
+LABEL="bcache_end"

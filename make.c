@@ -185,6 +185,7 @@ void usage(void)
 	       "	    --force		reformat a bcache device even if it is running\n"
 	       "	-l, --label		set label for device\n"
 	       "	    --cache_replacement_policy=(lru|fifo)\n"
+		   "	    --ioctl		Communicate via IOCTL with the control device\n"
 	       "	-h, --help		display this help and exit\n");
 	exit(EXIT_FAILURE);
 }
@@ -238,21 +239,131 @@ err:
 	return -1;
 }
 
-static void write_sb(char *dev, struct sb_context *sbc, bool bdev, bool force)
+static void write_sb_common(char *dev, struct cache_sb *sb, struct sb_context *sbc,
+	bool bdev, unsigned long long nbuckets)
 {
-	int fd;
-	char uuid_str[40], set_uuid_str[40], zeroes[SB_START] = {0};
-	struct cache_sb_disk sb_disk;
-	struct cache_sb sb;
-	blkid_probe pr;
+	char uuid_str[40], set_uuid_str[40];
 	unsigned int block_size = sbc->block_size;
 	unsigned int bucket_size = sbc->bucket_size;
-	bool wipe_bcache = sbc->wipe_bcache;
 	bool writeback = sbc->writeback;
 	bool discard = sbc->discard;
 	char *label = sbc->label;
 	uint64_t data_offset = sbc->data_offset;
 	unsigned int cache_replacement_policy = sbc->cache_replacement_policy;
+
+	memset(sb, 0, sizeof(struct cache_sb));
+
+	sb->offset	= SB_SECTOR;
+	sb->version	= bdev
+		? BCACHE_SB_VERSION_BDEV
+		: BCACHE_SB_VERSION_CDEV;
+
+	memcpy(sb->magic, bcache_magic, 16);
+	uuid_generate(sb->uuid);
+	memcpy(sb->set_uuid, sbc->set_uuid, sizeof(sb->set_uuid));
+
+	sb->block_size	= block_size;
+
+	uuid_unparse(sb->uuid, uuid_str);
+	uuid_unparse(sb->set_uuid, set_uuid_str);
+
+	if (SB_IS_BDEV(sb)) {
+		SET_BDEV_CACHE_MODE(sb, writeback ?
+			CACHE_MODE_WRITEBACK : CACHE_MODE_WRITETHROUGH);
+
+		/*
+		 * Currently bcache does not support writeback mode for
+		 * zoned device as backing device. If the cache mode is
+		 * explicitly set to writeback, automatically convert to
+		 * writethough mode.
+		 */
+		if (is_zoned_device(dev) &&
+		    BDEV_CACHE_MODE(sb) == CACHE_MODE_WRITEBACK) {
+			printf("Zoned device %s detected: convert to writethrough mode.\n\n",
+				dev);
+			SET_BDEV_CACHE_MODE(sb, CACHE_MODE_WRITETHROUGH);
+		}
+
+		if (data_offset != BDEV_DATA_START_DEFAULT) {
+			if (sb->version < BCACHE_SB_VERSION_BDEV_WITH_OFFSET)
+				sb->version = BCACHE_SB_VERSION_BDEV_WITH_OFFSET;
+			sb->data_offset = data_offset;
+		}
+
+		printf("Name			%s\n", dev);
+		printf("Label			%s\n", label);
+		printf("Type			data\n");
+		printf("UUID:			%s\n"
+		       "Set UUID:		%s\n"
+		       "version:		%u\n"
+		       "block_size_in_sectors:	%u\n"
+		       "data_offset_in_sectors:	%ju\n",
+		       uuid_str, set_uuid_str,
+		       (unsigned int) sb->version,
+		       sb->block_size,
+		       data_offset);
+		putchar('\n');
+	} else {
+		set_bucket_size(sb, bucket_size);
+
+		sb->nbuckets		= nbuckets;
+		sb->nr_in_set		= 1;
+		/* 23 is (SB_SECTOR + SB_SIZE) - 1 sectors */
+		sb->first_bucket		= (23 / sb->bucket_size) + 1;
+
+		if (sb->nbuckets < 1 << 7) {
+			fprintf(stderr, "Not enough buckets: %llu, need %u\n",
+			       sb->nbuckets, 1 << 7);
+			exit(EXIT_FAILURE);
+		}
+
+		SET_CACHE_DISCARD(sb, discard);
+		SET_CACHE_REPLACEMENT(sb, cache_replacement_policy);
+
+		printf("Name			%s\n", dev);
+		printf("Label			%s\n", label);
+		printf("Type			cache\n");
+		printf("UUID:			%s\n"
+		       "Set UUID:		%s\n"
+		       "version:		%u\n"
+		       "nbuckets:		%llu\n"
+		       "block_size_in_sectors:	%u\n"
+		       "bucket_size_in_sectors:	%u\n"
+		       "nr_in_set:		%u\n"
+		       "nr_this_dev:		%u\n"
+		       "first_bucket:		%u\n",
+		       uuid_str, set_uuid_str,
+		       (unsigned int) sb->version,
+		       sb->nbuckets,
+		       sb->block_size,
+		       sb->bucket_size,
+		       sb->nr_in_set,
+		       sb->nr_this_dev,
+		       sb->first_bucket);
+
+		putchar('\n');
+	}
+
+	/* write label */
+	int num, i;
+
+	num = strlen(sbc->label);
+	for (i = 0; i < num; i++)
+		sb->label[i] = sbc->label[i];
+	sb->label[i] = '\0';
+
+}
+
+static void write_sb(char *dev, struct sb_context *sbc, bool bdev, bool force)
+{
+	int fd;
+	char zeroes[SB_START] = {0};
+	struct cache_sb_disk sb_disk;
+	struct cache_sb sb;
+	blkid_probe pr;
+	uint64_t nbuckets;
+	bool wipe_bcache = sbc->wipe_bcache;
+	bool discard = sbc->discard;
 
 	fd = open(dev, O_RDWR|O_EXCL);
 
@@ -345,110 +456,16 @@ static void write_sb(char *dev, struct sb_context *sbc, bool bdev, bool force)
 	}
 
 	memset(&sb_disk, 0, sizeof(struct cache_sb_disk));
-	memset(&sb, 0, sizeof(struct cache_sb));
 
-	sb.offset	= SB_SECTOR;
-	sb.version	= bdev
-		? BCACHE_SB_VERSION_BDEV
-		: BCACHE_SB_VERSION_CDEV;
+	nbuckets = getblocks(fd) / sbc->bucket_size;
 
-	memcpy(sb.magic, bcache_magic, 16);
-	uuid_generate(sb.uuid);
-	memcpy(sb.set_uuid, sbc->set_uuid, sizeof(sb.set_uuid));
+	write_sb_common(dev, &sb, sbc, bdev, nbuckets);
 
-	sb.block_size	= block_size;
-
-	uuid_unparse(sb.uuid, uuid_str);
-	uuid_unparse(sb.set_uuid, set_uuid_str);
-
-	if (SB_IS_BDEV(&sb)) {
-		SET_BDEV_CACHE_MODE(&sb, writeback ?
-			CACHE_MODE_WRITEBACK : CACHE_MODE_WRITETHROUGH);
-
-		/*
-		 * Currently bcache does not support writeback mode for
-		 * zoned device as backing device. If the cache mode is
-		 * explicitly set to writeback, automatically convert to
-		 * writethough mode.
-		 */
-		if (is_zoned_device(dev) &&
-		    BDEV_CACHE_MODE(&sb) == CACHE_MODE_WRITEBACK) {
-			printf("Zoned device %s detected: convert to writethrough mode.\n\n",
-				dev);
-			SET_BDEV_CACHE_MODE(&sb, CACHE_MODE_WRITETHROUGH);
-		}
-
-		if (data_offset != BDEV_DATA_START_DEFAULT) {
-			if (sb.version < BCACHE_SB_VERSION_BDEV_WITH_OFFSET)
-				sb.version = BCACHE_SB_VERSION_BDEV_WITH_OFFSET;
-			sb.data_offset = data_offset;
-		}
-
-		printf("Name			%s\n", dev);
-		printf("Label			%s\n", label);
-		printf("Type			data\n");
-		printf("UUID:			%s\n"
-		       "Set UUID:		%s\n"
-		       "version:		%u\n"
-		       "block_size_in_sectors:	%u\n"
-		       "data_offset_in_sectors:	%ju\n",
-		       uuid_str, set_uuid_str,
-		       (unsigned int) sb.version,
-		       sb.block_size,
-		       data_offset);
-		putchar('\n');
-	} else {
-		set_bucket_size(&sb, bucket_size);
-
-		sb.nbuckets		= getblocks(fd) / sb.bucket_size;
-		sb.nr_in_set		= 1;
-		/* 23 is (SB_SECTOR + SB_SIZE) - 1 sectors */
-		sb.first_bucket		= (23 / sb.bucket_size) + 1;
-
-		if (sb.nbuckets < 1 << 7) {
-			fprintf(stderr, "Not enough buckets: %llu, need %u\n",
-			       sb.nbuckets, 1 << 7);
-			exit(EXIT_FAILURE);
-		}
-
-		SET_CACHE_DISCARD(&sb, discard);
-		SET_CACHE_REPLACEMENT(&sb, cache_replacement_policy);
-
-		printf("Name			%s\n", dev);
-		printf("Label			%s\n", label);
-		printf("Type			cache\n");
-		printf("UUID:			%s\n"
-		       "Set UUID:		%s\n"
-		       "version:		%u\n"
-		       "nbuckets:		%llu\n"
-		       "block_size_in_sectors:	%u\n"
-		       "bucket_size_in_sectors:	%u\n"
-		       "nr_in_set:		%u\n"
-		       "nr_this_dev:		%u\n"
-		       "first_bucket:		%u\n",
-		       uuid_str, set_uuid_str,
-		       (unsigned int) sb.version,
-		       sb.nbuckets,
-		       sb.block_size,
-		       sb.bucket_size,
-		       sb.nr_in_set,
-		       sb.nr_this_dev,
-		       sb.first_bucket);
-
-		/* Attempting to discard cache device
-		 */
+	if (!SB_IS_BDEV(&sb)) {
+		/* Attempting to discard cache device */
 		if (discard)
 			blkdiscard_all(dev, fd);
-		putchar('\n');
 	}
-
-	/* write label */
-	int num, i;
-
-	num = strlen(label);
-	for (i = 0; i < num; i++)
-		sb.label[i] = label[i];
-	sb.label[i] = '\0';
 
 	/*
 	 * Swap native bytes order to little endian for writing
@@ -470,6 +487,76 @@ static void write_sb(char *dev, struct sb_context *sbc, bool bdev, bool force)
 	}
 
 	fsync(fd);
+	close(fd);
+}
+
+// TODO(atom): Move it to common header file
+struct bch_register_device {
+	const char *dev_name;
+	size_t size;
+	struct cache_sb *sb;
+};
+
+#define BCH_IOCTL_MAGIC (0xBC)
+
+/** Start new cache instance, load cache or recover cache */
+#define BCH_IOCTL_REGISTER_DEVICE	_IOWR(BCH_IOCTL_MAGIC, 1, struct bch_register_device)
+
+#define CUSTOM_BCACHE_CTRL_DEV "/dev/bcache_ctrl"
+
+static void write_sb_ioctl(char *dev, struct sb_context *sbc, bool bdev, bool force)
+{
+	int fd;
+	uint64_t dev_blocks;
+
+	struct bch_register_device cmd;
+	struct stat query_core;
+
+	/* Check if core device provided is valid */
+	fd = open(dev, 0);
+	if (fd < 0) {
+		fprintf(stderr, "Device %s not found.\n", dev);
+		exit(EXIT_FAILURE);
+	}
+
+	dev_blocks = getblocks(fd);
+
+	close(fd);
+
+	/* Check if the core device is a block device or a file */
+	if (stat(dev, &query_core)) {
+		fprintf(stderr, "Could not stat target core device %s!\n", dev);
+		exit(EXIT_FAILURE);
+	}
+
+	if (!S_ISBLK(query_core.st_mode)) {
+		fprintf(stderr, "Core object %s is not supported!\n", dev);
+		exit(EXIT_FAILURE);
+	}
+
+	fd = open(CUSTOM_BCACHE_CTRL_DEV, 0);
+	if (fd < 0) {
+		fprintf(stderr, "Unable to open " CUSTOM_BCACHE_CTRL_DEV ": %s\n", strerror(errno));
+		exit(EXIT_FAILURE);
+	}
+
+	memset(&cmd, 0, sizeof(cmd));
+
+	cmd.sb = malloc(sizeof(struct cache_sb));
+
+	cmd.dev_name = strdup(dev);
+	cmd.size = strlen(cmd.dev_name) + 1;
+
+	write_sb_common(dev, cmd.sb, sbc, bdev, dev_blocks/sbc->bucket_size);
+
+	if (ioctl(fd, BCH_IOCTL_REGISTER_DEVICE, &cmd) < 0) {
+		fprintf(stderr, "Error during ioctl operation: %s\n", strerror(errno));
+		free(cmd.sb);
+		close(fd);
+		exit(EXIT_FAILURE);
+	}
+
+	free(cmd.sb);
 	close(fd);
 }
 
@@ -523,7 +610,7 @@ int make_bcache(int argc, char **argv)
 	char *backing_devices[argc];
 	char label[SB_LABEL_SIZE] = { 0 };
 	unsigned int block_size = 0, bucket_size = 1024;
-	int writeback = 0, discard = 0, wipe_bcache = 0, force = 0;
+	int writeback = 0, discard = 0, wipe_bcache = 0, force = 0, use_ioctl = 0;
 	unsigned int cache_replacement_policy = 0;
 	uint64_t data_offset = BDEV_DATA_START_DEFAULT;
 	uuid_t set_uuid;
@@ -547,6 +634,7 @@ int make_bcache(int argc, char **argv)
 		{ "help",		0, NULL,	'h' },
 		{ "force",		0, &force,	 1 },
 		{ "label",		1, NULL,	 'l' },
+		{ "ioctl",		0, &use_ioctl,	1},
 		{ NULL,			0, NULL,	0 },
 	};
 
@@ -654,14 +742,21 @@ int make_bcache(int argc, char **argv)
 	memcpy(sbc.set_uuid, set_uuid, sizeof(sbc.set_uuid));
 	sbc.label = label;
 
-	for (i = 0; i < ncache_devices; i++)
+	for (i = 0; i < ncache_devices; i++) {
+		if (use_ioctl) {
+			fprintf(stderr, "WARNING. Cache devices should use the normal way!\n");
+		}
 		write_sb(cache_devices[i], &sbc, false, force);
+	}
 
 	for (i = 0; i < nbacking_devices; i++) {
 		check_data_offset_for_zoned_device(backing_devices[i],
 						   &sbc.data_offset);
-
-		write_sb(backing_devices[i], &sbc, true, force);
+		if (use_ioctl) {
+			write_sb_ioctl(backing_devices[i], &sbc, true, force);
+		} else {
+			write_sb(backing_devices[i], &sbc, true, force);
+		}
 	}
 
 	return 0;
