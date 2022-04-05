@@ -16,12 +16,12 @@ def device_exists(d):
 
 def device_already_registered(d):
     device_basename = os.path.basename(d)
-    return os.path.exists(f"/sys/block/{device_basename}/bcache/")
+    return os.path.exists(f"/sys/class/block/{device_basename}/bcache/")
 
 
 def get_cache_uuid(c):
     cache_basename = os.path.basename(c)
-    return os.path.basename(os.readlink(f'/sys/block/{cache_basename}/bcache/set'))
+    return os.path.basename(os.readlink(f'/sys/class/block/{cache_basename}/bcache/set'))
 
 
 def register_device(d, dtype):
@@ -38,7 +38,7 @@ def register_device(d, dtype):
 def attach_backing_to_cache(bd, cset):
     backing_basename = os.path.basename(bd)
     try:
-        with open(f'/sys/block/{backing_basename}/bcache/attach', 'w') as f:
+        with open(f'/sys/class/block/{backing_basename}/bcache/attach', 'w') as f:
             f.write(cset)
         return 0
     except Exception as e:
