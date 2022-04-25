@@ -5,4 +5,4 @@
 #       - device: /dev/sda
 #         cache_mode: wt
 #       - device: /dev/sdb
-#         cache_mode: wt
+#         cache_mode: wb
