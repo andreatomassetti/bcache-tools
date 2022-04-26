@@ -11,13 +11,12 @@ install: make-bcache probe-bcache bcache-super-show
 	$(INSTALL) -m0755 make-bcache bcache-super-show	bcache $(DESTDIR)${PREFIX}/sbin/
 	$(INSTALL) -m0755 bcache-status $(DESTDIR)${PREFIX}/sbin/
 	$(INSTALL) -m0755 probe-bcache bcache-register bcache-export-cached bcache-loader $(DESTDIR)$(UDEVLIBDIR)/
-	$(INSTALL) -m0644 69-bcache.rules	$(DESTDIR)$(UDEVLIBDIR)/rules.d/
+	$(INSTALL) -m0644 69-bcache.rules 70-bcache-config.rules $(DESTDIR)$(UDEVLIBDIR)/rules.d/
 	$(INSTALL) -m0644 -- *.8 $(DESTDIR)${PREFIX}/share/man/man8/
 	$(INSTALL) -D -m0755 initramfs/hook	$(DESTDIR)/usr/share/initramfs-tools/hooks/bcache
 	$(INSTALL) -D -m0755 initcpio/install	$(DESTDIR)/usr/lib/initcpio/install/bcache
 	$(INSTALL) -D -m0755 dracut/module-setup.sh $(DESTDIR)$(DRACUTLIBDIR)/modules.d/90bcache/module-setup.sh
 	$(INSTALL) -D -m0644 bcache.conf.example $(DESTDIR)/etc/bcache/bcache.conf.example
-	$(INSTALL) -D -m0644 60-bcache.rules $(DESTDIR)$(UDEVLIBDIR)/rules.d/
 #	$(INSTALL) -m0755 bcache-test $(DESTDIR)${PREFIX}/sbin/
 
 clean:
