@@ -21,7 +21,14 @@ def device_already_registered(d):
 
 def get_cache_uuid(c):
     cache_basename = os.path.basename(c)
-    return os.path.basename(os.readlink(f'/sys/class/block/{cache_basename}/bcache/set'))
+    cache_set_path = f'/sys/class/block/{cache_basename}/bcache/set'
+    retries = 1
+    while (retries < 5):
+        if os.path.exists(cache_set_path):
+            break
+        sleep(3)
+        retries += 1
+    return os.path.basename(os.readlink(cache_set_path))
 
 
 def register_device(d, dtype, cmode):
@@ -32,8 +39,11 @@ def register_device(d, dtype, cmode):
                 cmd += ['-C', d]
             else:
                 cmd += ['--ioctl', '-B', d] + (['--writeback'] if cmode and str.lower(cmode) == 'wb' else [])
-            print(cmd)
-            return subprocess.call(cmd)
+            cmd_run = subprocess.run(cmd, capture_output=True)
+            if cmd_run.returncode:
+                sl.syslog(sl.LOG_WARNING, f'Error while executing \'{" ".join(cmd)}\': {str(cmd_run.stderr)}')
+
+            return cmd_run.returncode
     else:
         sl.syslog(sl.LOG_WARNING, f'Device does not exist: {d}')
 
@@ -57,10 +67,9 @@ def attach_backing_and_cache(bds, cd):
 
     if register_device(cd, "cache", None):
         sl.syslog(sl.LOG_ERR, f'Error while registering cache device {cd}')
-        return 1
+    else:
+        sl.syslog(sl.LOG_INFO, f'Successfully registered cache device {cd}')
 
-    sl.syslog(sl.LOG_INFO, f'Successfully registered cache device {cd}')
-    sleep(1)  # Wait for the cache device to fully register
     cache_set_uuid = get_cache_uuid(cd)
 
     for b in bds:
