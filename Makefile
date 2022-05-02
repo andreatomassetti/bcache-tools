@@ -8,6 +8,7 @@ CFLAGS+=-O2 -Wall -g
 all: make-bcache probe-bcache bcache-super-show bcache-register bcache
 
 install: make-bcache probe-bcache bcache-super-show
+	$(INSTALL) -m0755 -d $(DESTDIR)${PREFIX}/sbin/ $(DESTDIR)$(UDEVLIBDIR)/rules.d/ $(DESTDIR)${PREFIX}/share/man/man8/
 	$(INSTALL) -m0755 make-bcache bcache-super-show	bcache $(DESTDIR)${PREFIX}/sbin/
 	$(INSTALL) -m0755 bcache-status $(DESTDIR)${PREFIX}/sbin/
 	$(INSTALL) -m0755 probe-bcache bcache-register bcache-export-cached bcache-loader $(DESTDIR)$(UDEVLIBDIR)/
