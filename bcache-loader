@@ -26,6 +26,7 @@ def get_cache_uuid(c):
     while (retries < 5):
         if os.path.exists(cache_set_path):
             break
+        sl.syslog(sl.LOG_WARNING, f'Path "{cache_set_path}" does not exist. Retrying in 3s...')
         sleep(3)
         retries += 1
     return os.path.basename(os.readlink(cache_set_path))
@@ -33,7 +34,7 @@ def get_cache_uuid(c):
 
 def register_device(d, dtype, cmode):
     if device_exists(d):
-        if not device_already_registered(d):
+        if dtype != 'cache' or not device_already_registered(d):
             cmd = ['/usr/sbin/make-bcache']
             if dtype == 'cache':
                 cmd += ['-C', d]
