@@ -32,6 +32,15 @@ def get_cache_uuid(c):
     return os.path.basename(os.readlink(cache_set_path))
 
 
+def probe_cache_device(d):
+    cmd = ['/lib/udev/bcache-register', d]
+    cmd_run = subprocess.run(cmd, capture_output=True)
+    if cmd_run.returncode:
+        sl.syslog(sl.LOG_WARNING, f'Error while executing \'{" ".join(cmd)}\': {str(cmd_run.stderr)}')
+
+    return cmd_run.returncode
+
+
 def register_device(d, dtype, cmode):
     if device_exists(d):
         if dtype != 'cache' or not device_already_registered(d):
@@ -70,6 +79,9 @@ def attach_backing_and_cache(bds, cd):
         sl.syslog(sl.LOG_ERR, f'Error while registering cache device {cd}')
     else:
         sl.syslog(sl.LOG_INFO, f'Successfully registered cache device {cd}')
+
+    if probe_cache_device(cd) == 0:
+        sl.syslog(sl.LOG_INFO, f'Successfully probed cache device {cd}')
 
     cache_set_uuid = get_cache_uuid(cd)
 
