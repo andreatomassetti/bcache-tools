@@ -491,10 +491,11 @@ static void write_sb(char *dev, struct sb_context *sbc, bool bdev, bool force)
 }
 
 // TODO(atom): Move it to common header file
+// BDEVNAME_SIZE is defined in blkdev.h but not exported
+#define BDEVNAME_SIZE	32	/* Largest string for a blockdev identifier */
 struct bch_register_device {
-	const char *dev_name;
-	size_t size;
-	struct cache_sb *sb;
+	char dev_name[BDEVNAME_SIZE];
+	struct cache_sb sb;
 };
 
 #define BCH_IOCTL_MAGIC (0xBC)
@@ -541,22 +542,16 @@ static void write_sb_ioctl(char *dev, struct sb_context *sbc, bool bdev, bool fo
 	}
 
 	memset(&cmd, 0, sizeof(cmd));
+	strncpy(&cmd.dev_name[0], dev, BDEVNAME_SIZE - 1);
 
-	cmd.sb = malloc(sizeof(struct cache_sb));
-
-	cmd.dev_name = strdup(dev);
-	cmd.size = strlen(cmd.dev_name) + 1;
-
-	write_sb_common(dev, cmd.sb, sbc, bdev, dev_blocks/sbc->bucket_size);
+	write_sb_common(dev, &cmd.sb, sbc, bdev, dev_blocks/sbc->bucket_size);
 
 	if (ioctl(fd, BCH_IOCTL_REGISTER_DEVICE, &cmd) < 0) {
 		fprintf(stderr, "Error during ioctl operation: %s\n", strerror(errno));
-		free(cmd.sb);
 		close(fd);
 		exit(EXIT_FAILURE);
 	}
 
-	free(cmd.sb);
 	close(fd);
 }
 
