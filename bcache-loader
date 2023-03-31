@@ -121,7 +121,7 @@ try:
         # Check if it's a cache device
         if sys.argv[1] == cache_device:
             sl.syslog(sl.LOG_INFO, f'Managing cache device: {str(sys.argv[1])}')
-            attach_backing_and_cache(cache['backing_devices'], cache_device)
+            attach_backing_and_cache([os.path.realpath(b) for b in cache['backing_devices']], cache_device)
         else:
             # Check if it's a backing device of this cache device
             for backing in cache['backing_devices']:
