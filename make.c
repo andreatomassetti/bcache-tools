@@ -748,6 +748,11 @@ int make_bcache(int argc, char **argv)
 		check_data_offset_for_zoned_device(backing_devices[i],
 						   &sbc.data_offset);
 		if (use_ioctl) {
+			if (sbc.data_offset != 0)
+				fprintf(stderr, "WARNING. data_offset must be 0 when using IOCTL"
+								" registration! Enforcing it...\n");
+
+			sbc.data_offset = 0;
 			write_sb_ioctl(backing_devices[i], &sbc, true, force);
 		} else {
 			write_sb(backing_devices[i], &sbc, true, force);
