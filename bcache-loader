@@ -43,6 +43,8 @@ def probe_cache_device(d):
 
 def register_device(d, dtype, cmode):
     if device_exists(d):
+        # If dtype is not cache there's a chance that we are trying to re-register
+        # the device because it changed size
         if dtype != 'cache' or not device_already_registered(d):
             cmd = ['/usr/sbin/make-bcache']
             if dtype == 'cache':
@@ -88,8 +90,10 @@ def attach_backing_and_cache(bds, cd):
     for b in bds:
         backing_device = b['device']
         if register_device(backing_device, "backing", b['cache_mode']):
-            sl.syslog(sl.LOG_ERR, f'Error while registering backing device {backing_device} ...')
-            return 1
+            if not device_already_registered(backing_device):
+                # Indeed something went wrong with this device
+                sl.syslog(sl.LOG_ERR, f'Error while registering backing device {backing_device} ...')
+                return 1
 
         sl.syslog(sl.LOG_INFO, f'Successfully registered backing device {backing_device}')
         sleep(1)  # Wait for the backing device to fully register
