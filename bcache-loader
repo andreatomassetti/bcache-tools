@@ -9,6 +9,8 @@ from time import sleep
 
 import yaml
 
+__version__ = "0.4"
+
 
 def device_exists(d):
     return os.path.exists(d)
