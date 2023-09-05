@@ -2,6 +2,7 @@
 ACTION=="remove", GOTO="bcache_end"
 SUBSYSTEM!="block", GOTO="bcache_end"
 
+ACTION=="change", ENV{DEVICE_CHANGED}="1"
 RUN+="/lib/udev/bcache-loader /dev/$name"
 
 LABEL="bcache_end"

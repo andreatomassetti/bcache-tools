@@ -21,17 +21,19 @@ def device_already_registered(d):
     return os.path.exists(f"/sys/class/block/{device_basename}/bcache/")
 
 
-def get_cache_uuid(c):
+def get_cache_uuid(c, retry=False):
     cache_basename = os.path.basename(c)
     cache_set_path = f'/sys/class/block/{cache_basename}/bcache/set'
-    retries = 1
+    retries = 1 if retry else 4
+    cache_set_found = False
     while (retries < 5):
         if os.path.exists(cache_set_path):
+            cache_set_found = True
             break
         sl.syslog(sl.LOG_WARNING, f'Path "{cache_set_path}" does not exist. Retrying in 3s...')
         sleep(3)
         retries += 1
-    return os.path.basename(os.readlink(cache_set_path))
+    return os.path.basename(os.readlink(cache_set_path)) if cache_set_found else None
 
 
 def probe_cache_device(d):
@@ -47,17 +49,24 @@ def register_device(d, dtype, cmode):
     if device_exists(d):
         # If dtype is not cache there's a chance that we are trying to re-register
         # the device because it changed size
-        if dtype != 'cache' or not device_already_registered(d):
+        if not device_already_registered(d) or (dtype != "cache" and os.getenv('DEVICE_CHANGED')):
             cmd = ['/usr/sbin/make-bcache']
             if dtype == 'cache':
                 cmd += ['-C', d]
             else:
                 cmd += ['--ioctl', '-B', d] + (['--writeback'] if cmode and str.lower(cmode) == 'wb' else [])
             cmd_run = subprocess.run(cmd, capture_output=True)
-            if cmd_run.returncode:
+            retries = 1
+            while (cmd_run.returncode):
                 sl.syslog(sl.LOG_WARNING, f'Error while executing \'{" ".join(cmd)}\': {str(cmd_run.stderr)}')
-
+                if (retries > 3):
+                    break
+                sleep(3)
+                cmd_run = subprocess.run(cmd, capture_output=True)
+                retries += 1
             return cmd_run.returncode
+        else:
+            sl.syslog(sl.LOG_INFO, f'Device {d} already registered')
     else:
         sl.syslog(sl.LOG_WARNING, f'Device does not exist: {d}')
 
@@ -66,6 +75,15 @@ def register_device(d, dtype, cmode):
 
 def attach_backing_to_cache(bd, cset):
     backing_basename = os.path.basename(bd)
+    cache_set_path = f'/sys/class/block/{backing_basename}/bcache/cache'
+    if os.path.exists(cache_set_path):
+        cache_set = os.path.basename(os.readlink(cache_set_path))
+        if cache_set == cset:
+            sl.syslog(sl.LOG_INFO, f'{bd} already attached to {cset}.')
+            return 0
+        else:
+            sl.syslog(sl.LOG_WARNING, f'{bd} is attached to a different cache: {cache_set} != {cset}. Trying to change it.')
+
     try:
         with open(f'/sys/class/block/{backing_basename}/bcache/attach', 'w') as f:
             f.write(cset)
@@ -84,15 +102,17 @@ def attach_backing_and_cache(bds, cd):
     else:
         sl.syslog(sl.LOG_INFO, f'Successfully registered cache device {cd}')
 
-    if probe_cache_device(cd) == 0:
-        sl.syslog(sl.LOG_INFO, f'Successfully probed cache device {cd}')
-
     cache_set_uuid = get_cache_uuid(cd)
+    if not cache_set_uuid:
+        if probe_cache_device(cd) == 0:
+            sl.syslog(sl.LOG_INFO, f'Successfully probed cache device {cd}')
+
+        cache_set_uuid = get_cache_uuid(cd, True)
 
     for b in bds:
         backing_device = b['device']
         if register_device(backing_device, "backing", b['cache_mode']):
-            if not device_already_registered(backing_device):
+            if not device_already_registered(backing_device) or os.getenv('DEVICE_CHANGED'):
                 # Indeed something went wrong with this device
                 sl.syslog(sl.LOG_ERR, f'Error while registering backing device {backing_device} ...')
                 return 1
@@ -120,21 +140,21 @@ except Exception as e:
     exit(1)
 
 try:
-
     for cache in config['cache_devices']:
         cache_device = os.path.realpath(cache['device'])
+        sys_arg_real_path = os.path.realpath(sys.argv[1])
 
         # Check if it's a cache device
-        if sys.argv[1] == cache_device:
-            sl.syslog(sl.LOG_INFO, f'Managing cache device: {str(sys.argv[1])}')
+        if sys_arg_real_path == cache_device:
+            sl.syslog(sl.LOG_INFO, f'Managing cache device: {str(sys.argv[1])} (real path: {sys_arg_real_path})')
             attach_backing_and_cache([{**b, 'device': os.path.realpath(b['device'])} for b in cache['backing_devices']], cache_device)
         else:
             # Check if it's a backing device of this cache device
             for backing in cache['backing_devices']:
                 backing_device = os.path.realpath(backing['device'])
-                if sys.argv[1] == backing_device:
-                    sl.syslog(sl.LOG_INFO, f'Managing backing device: {str(sys.argv[1])}')
-                    attach_backing_and_cache([backing], cache_device)
+                if sys_arg_real_path == backing_device:
+                    sl.syslog(sl.LOG_INFO, f'Managing backing device: {backing["device"]} (real path: {backing_device})')
+                    attach_backing_and_cache([{**backing, 'device': os.path.realpath(backing['device'])}], cache_device)
 except Exception as e:
     sl.syslog(sl.LOG_ERR, f'Reason: {str(e)}')
     exit(1)
