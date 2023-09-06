@@ -9,7 +9,7 @@ from time import sleep
 
 import yaml
 
-__version__ = "0.4"
+__version__ = "0.4.1"
 
 
 def device_exists(d):
