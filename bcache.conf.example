@@ -6,3 +6,6 @@
 #         cache_mode: wt
 #       - device: /dev/sdb
 #         cache_mode: wb
+#     flash_disks:
+#       - size: 20G
+#         label: "swap"
