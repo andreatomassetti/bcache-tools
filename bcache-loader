@@ -105,15 +105,17 @@ def attach_backing_to_cache(bd, cset):
         sl.syslog(sl.LOG_ERR, f'Unable to attach {bd} to {cset}. Reason: {str(e)}')
         return 1
 
+
 def set_cutoff(bd, seq_cut):
     backing_basename = os.path.basename(bd)
     try:
         with open(f'/sys/class/block/{backing_basename}/bcache/sequential_cutoff', 'w') as f:
-            f.write(seq_cut)
+            f.write(str(seq_cut))
         return 0
     except Exception as e:
         sl.syslog(sl.LOG_ERR, f'Unable to set in {bd} sequential_cutoff to {seq_cut}. Reason: {str(e)}')
         return 1
+
 
 def attach_backing_and_cache(bds, cd):
 
@@ -133,7 +135,7 @@ def attach_backing_and_cache(bds, cd):
 
     for b in bds:
         backing_device = b['device']
-        if register_device(backing_device, "backing", b['cache_mode']):
+        if register_device(backing_device, "backing", b.get('cache_mode')):
             if not device_already_registered(backing_device) or os.getenv('DEVICE_CHANGED'):
                 # Indeed something went wrong with this device
                 sl.syslog(sl.LOG_ERR, f'Error while registering backing device {backing_device} ...')
@@ -144,7 +146,9 @@ def attach_backing_and_cache(bds, cd):
         if cache_set_uuid:
             sl.syslog(sl.LOG_INFO, f'Attaching backing device {backing_device} to cache device {cd} with UUID {cache_set_uuid}')
             attach_backing_to_cache(backing_device, cache_set_uuid)
-        if 0 <= b['sequential_cutoff']:
+
+        # Set sequential_cutoff
+        if b.get('sequential_cutoff', -1) >= 0:
             set_cutoff(backing_device, b['sequential_cutoff'])
     return 0
 
