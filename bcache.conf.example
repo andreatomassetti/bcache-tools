@@ -4,6 +4,7 @@
 #     backing_devices:
 #       - device: /dev/sda
 #         cache_mode: wt
+#         sequential_cutoff: 0
 #       - device: /dev/sdb
 #         cache_mode: wb
 #     flash_disks:
